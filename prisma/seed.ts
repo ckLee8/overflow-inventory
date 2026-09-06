@@ -239,7 +239,7 @@ async function main() {
       storeLocationId: mainFloor.id,
       orderDate: addDays(weekStart, 2),
       status: PurchaseOrderStatus.APPROVED,
-      notes: "ORDERED candle line — mark SHIPPED or receive on Inventory #receiving",
+      notes: "ORDERED candle line — Mark ship or Receive in Inventory unified table",
       lines: {
         create: [
           {
@@ -259,7 +259,7 @@ async function main() {
       storeLocationId: backStock.id,
       orderDate: addDays(weekStart, 1),
       status: PurchaseOrderStatus.SUBMITTED,
-      notes: "Mixed statuses — towel SHIPPED awaiting receive; tape still ORDERED",
+      notes: "Mixed statuses — towel SHIPPED (primary for receive); tape still ORDERED",
       lines: {
         create: [
           {
