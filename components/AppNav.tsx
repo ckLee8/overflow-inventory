@@ -14,7 +14,7 @@ const links = [
   { href: "/inventory", label: "Inventory" },
   { href: "/ordering", label: "Ordering" },
   { href: "/approvals", label: "Approvals" },
-  { href: "/receiving", label: "Receiving" },
+  { href: "/inventory#receiving", label: "Receiving" },
   { href: "/vendors", label: "Vendors" },
   { href: "/reports", label: "Reports" },
 ];
@@ -60,16 +60,26 @@ export function AppNav({ user }: { user?: NavUser }) {
         </div>
         <nav className="flex flex-wrap gap-1">
           {links.map((link) => {
-            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const pathOnly = link.href.split("#")[0];
+            const isReceivingAlias = link.href.includes("#receiving");
+            const active = isReceivingAlias
+              ? pathname === "/inventory" || pathname.startsWith("/receiving")
+              : link.label === "Inventory"
+                ? pathname === "/inventory" || pathname.startsWith("/inventory/")
+                : pathname === pathOnly || pathname.startsWith(`${pathOnly}/`);
+            // Prefer Inventory highlight when both Inventory + Receiving alias match:
+            // Receiving alias stays secondary (same page section).
+            const toneActive =
+              isReceivingAlias && (pathname === "/inventory" || pathname.startsWith("/receiving"))
+                ? "bg-brand-100 text-brand-900"
+                : active
+                  ? "bg-brand-600 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200";
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`min-h-11 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active
-                    ? "bg-brand-600 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
+                className={`min-h-11 rounded-lg px-3 py-2 text-sm font-medium transition ${toneActive}`}
               >
                 {link.label}
               </Link>
