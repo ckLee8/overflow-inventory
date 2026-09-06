@@ -1,11 +1,15 @@
 import { getPendingPurchaseOrders } from "@/lib/data";
 import { hasDatabase } from "@/lib/db";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ApprovalsPage() {
   const db = hasDatabase();
   const pos = await getPendingPurchaseOrders();
+  const session = await auth();
+  const canApprove =
+    session?.user?.role === "ADMIN" || session?.user?.role === "MANAGER";
 
   return (
     <div className="space-y-4">
@@ -17,15 +21,19 @@ export default async function ApprovalsPage() {
         </p>
       </div>
 
+      {!canApprove ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          You can view pending orders, but approving is limited to MANAGER and ADMIN roles.
+        </div>
+      ) : null}
+
       {!db ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-          Set <code className="rounded bg-slate-100 px-1">DATABASE_URL</code> and seed to list
-          pending POs. Until then this page is a stub.
+          Set DATABASE_URL and seed to list pending POs. Until then this page is a stub.
         </div>
       ) : pos.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-          No draft/approved purchase orders. Seed data includes sample POs, or create them from the
-          weekly grid later.
+          No draft/approved purchase orders. Seed data includes sample POs.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -38,6 +46,7 @@ export default async function ApprovalsPage() {
                 <th className="px-3 py-3 font-semibold">Order date</th>
                 <th className="px-3 py-3 font-semibold">Lines</th>
                 <th className="px-3 py-3 font-semibold">Notes</th>
+                {canApprove ? <th className="px-3 py-3 font-semibold">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -59,6 +68,9 @@ export default async function ApprovalsPage() {
                   <td className="px-3 py-3">{po.orderDate}</td>
                   <td className="px-3 py-3">{po.lineCount}</td>
                   <td className="px-3 py-3 text-slate-500">{po.notes ?? "—"}</td>
+                  {canApprove ? (
+                    <td className="px-3 py-3 text-slate-400">Approve (soon)</td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

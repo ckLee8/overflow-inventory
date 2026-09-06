@@ -1,4 +1,5 @@
-import { PrismaClient, PurchaseOrderStatus } from "@prisma/client";
+import { PrismaClient, PurchaseOrderStatus, Role } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -27,6 +28,37 @@ async function main() {
   await prisma.product.deleteMany();
   await prisma.vendor.deleteMany();
   await prisma.storeLocation.deleteMany();
+  await prisma.user.deleteMany();
+
+  const passwordHash = await bcrypt.hash("admin12345", 10);
+  const managerHash = await bcrypt.hash("manager12345", 10);
+  const staffHash = await bcrypt.hash("staff12345", 10);
+
+  await prisma.user.createMany({
+    data: [
+      {
+        email: "admin@example.com",
+        name: "Default Admin",
+        passwordHash,
+        role: Role.ADMIN,
+        active: true,
+      },
+      {
+        email: "manager@example.com",
+        name: "Sample Manager",
+        passwordHash: managerHash,
+        role: Role.MANAGER,
+        active: true,
+      },
+      {
+        email: "staff@example.com",
+        name: "Sample Staff",
+        passwordHash: staffHash,
+        role: Role.STAFF,
+        active: true,
+      },
+    ],
+  });
 
   const mainFloor = await prisma.storeLocation.create({
     data: { code: "MAIN", name: "Main Floor" },
@@ -40,7 +72,7 @@ async function main() {
       name: "Acme Wholesale",
       adapterType: "email_pdf",
       contactEmail: "orders@acme-wholesale.example",
-      orderDaysOfWeek: [1, 2, 3, 4, 5], // Mon–Fri
+      orderDaysOfWeek: [1, 2, 3, 4, 5],
     },
   });
   const shopifyCo = await prisma.vendor.create({
@@ -48,7 +80,7 @@ async function main() {
       name: "Shopify Portal Co",
       adapterType: "shopify_wholesale",
       contactEmail: "wholesale@shopify-portal.example",
-      orderDaysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+      orderDaysOfWeek: [1, 3, 5],
     },
   });
   const amazon = await prisma.vendor.create({
@@ -135,55 +167,53 @@ async function main() {
     data: { weekStart, status: "draft" },
   });
 
-  // Sample weekly order cells (enough to demo the grid)
   await prisma.weeklyOrderPlanCell.createMany({
     data: [
       {
         planId: plan.id,
         productId: mug.id,
         storeLocationId: mainFloor.id,
-        orderDate: addDays(weekStart, 0), // Mon
+        orderDate: addDays(weekStart, 0),
         quantity: 24,
       },
       {
         planId: plan.id,
         productId: mug.id,
         storeLocationId: mainFloor.id,
-        orderDate: addDays(weekStart, 3), // Thu
+        orderDate: addDays(weekStart, 3),
         quantity: 12,
       },
       {
         planId: plan.id,
         productId: candle.id,
         storeLocationId: mainFloor.id,
-        orderDate: addDays(weekStart, 0), // Mon (Shopify open)
+        orderDate: addDays(weekStart, 0),
         quantity: 18,
       },
       {
         planId: plan.id,
         productId: candle.id,
         storeLocationId: mainFloor.id,
-        orderDate: addDays(weekStart, 2), // Wed
+        orderDate: addDays(weekStart, 2),
         quantity: 12,
       },
       {
         planId: plan.id,
         productId: tape.id,
         storeLocationId: backStock.id,
-        orderDate: addDays(weekStart, 1), // Tue
+        orderDate: addDays(weekStart, 1),
         quantity: 6,
       },
       {
         planId: plan.id,
         productId: towel.id,
         storeLocationId: backStock.id,
-        orderDate: addDays(weekStart, 4), // Fri
+        orderDate: addDays(weekStart, 4),
         quantity: 8,
       },
     ],
   });
 
-  // A couple of draft/approved POs for Approvals page
   const draftPo = await prisma.purchaseOrder.create({
     data: {
       vendorId: acme.id,
@@ -211,6 +241,7 @@ async function main() {
   });
 
   console.log("Seed complete:");
+  console.log("  users: admin@example.com / admin12345 (CHANGE ME), manager@example.com, staff@example.com");
   console.log(`  locations: MAIN, BACK`);
   console.log(`  vendors: Acme, Shopify Portal, Amazon`);
   console.log(`  products: 4 SKUs with stock levels`);

@@ -12,9 +12,21 @@ type Props = {
   rows: MockSkuRow[];
   vendors: MockVendor[];
   source: "db" | "mock";
+  /** YYYY-MM-DD in APP_TIMEZONE — only this column’s qty is editable. */
+  todayDate: string;
+  /** IANA timezone label for UI copy (e.g. America/New_York). */
+  timezone: string;
 };
 
-export function WeeklyOrderGrid({ planId, columns, rows, vendors, source }: Props) {
+export function WeeklyOrderGrid({
+  planId,
+  columns,
+  rows,
+  vendors,
+  source,
+  todayDate,
+  timezone,
+}: Props) {
   const [groupBy, setGroupBy] = useState<GroupBy>("vendor");
   const [qty, setQty] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
@@ -39,7 +51,13 @@ export function WeeklyOrderGrid({ planId, columns, rows, vendors, source }: Prop
 
   const cellKey = (rowId: string, date: string) => `${rowId}:${date}`;
 
+  const isToday = (date: string) => date === todayDate;
+
   const persistCell = (rowId: string, date: string, value: number) => {
+    if (!isToday(date)) {
+      setStatus(`Locked — only today (${todayDate}, ${timezone}) is editable.`);
+      return;
+    }
     if (!planId || source !== "db") {
       setStatus("Mock mode — changes stay in this browser session only.");
       return;
@@ -76,8 +94,10 @@ export function WeeklyOrderGrid({ planId, columns, rows, vendors, source }: Prop
         </select>
         <p className="text-sm text-slate-500">
           {source === "db"
-            ? "Live weekly plan from Postgres · grey cells = vendor closed"
-            : "Mock data (set DATABASE_URL to use Prisma) · grey cells = vendor closed"}
+            ? "Live weekly plan · only today is editable · grey = locked or vendor closed"
+            : "Mock data · only today is editable · grey = locked or vendor closed"}
+          {" · "}
+          today {todayDate} ({timezone})
           {pending ? " · saving…" : null}
         </p>
         {status ? <p className="w-full text-xs text-slate-500">{status}</p> : null}
@@ -92,12 +112,23 @@ export function WeeklyOrderGrid({ planId, columns, rows, vendors, source }: Prop
               </th>
               <th className="px-3 py-3 font-semibold text-slate-700">Location</th>
               <th className="px-3 py-3 font-semibold text-slate-700">Stock</th>
-              {columns.map((col) => (
-                <th key={col.date} className="px-3 py-3 text-center font-semibold text-slate-700">
-                  <div>{col.label}</div>
-                  <div className="text-xs font-normal text-slate-500">{col.date.slice(5)}</div>
-                </th>
-              ))}
+              {columns.map((col) => {
+                const today = isToday(col.date);
+                return (
+                  <th
+                    key={col.date}
+                    className={`px-3 py-3 text-center font-semibold ${
+                      today ? "bg-brand-50 text-brand-900" : "text-slate-700"
+                    }`}
+                  >
+                    <div>{col.label}</div>
+                    <div className="text-xs font-normal text-slate-500">
+                      {col.date.slice(5)}
+                      {today ? " · today" : " · locked"}
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -123,34 +154,52 @@ export function WeeklyOrderGrid({ planId, columns, rows, vendors, source }: Prop
                       <span className="text-xs text-slate-400"> / min {row.minLevel}</span>
                     </td>
                     {columns.map((col) => {
+                      const today = isToday(col.date);
                       const blocked = vendorBlocked(row.vendorName, col.date);
+                      const locked = !today || blocked;
                       const key = cellKey(row.id, col.date);
+                      const lockReason = !today
+                        ? todayDate > col.date
+                          ? "Past day — locked"
+                          : "Future day — locked"
+                        : blocked
+                          ? "Vendor closed"
+                          : undefined;
                       return (
-                        <td key={key} className="px-2 py-2 text-center">
+                        <td
+                          key={key}
+                          className={`px-2 py-2 text-center ${today && !blocked ? "bg-brand-50/40" : ""}`}
+                        >
                           <input
                             type="number"
                             min={0}
                             inputMode="numeric"
-                            disabled={blocked}
+                            disabled={locked}
+                            readOnly={locked}
                             value={qty[key] ?? ""}
-                            placeholder={blocked ? "—" : "0"}
-                            onChange={(e) =>
+                            placeholder={locked ? "—" : "0"}
+                            title={lockReason}
+                            onChange={(e) => {
+                              if (locked) return;
                               setQty((prev) => ({
                                 ...prev,
                                 [key]: Number(e.target.value) || 0,
-                              }))
-                            }
+                              }));
+                            }}
                             onBlur={(e) => {
-                              if (blocked) return;
+                              if (locked) return;
                               const value = Number(e.target.value) || 0;
                               persistCell(row.id, col.date, value);
                             }}
                             className={`min-h-11 w-16 rounded-md border px-2 text-center touch-manipulation ${
-                              blocked
-                                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                                : "border-slate-300 bg-white"
+                              locked
+                                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-80"
+                                : "border-brand-300 bg-white shadow-sm ring-1 ring-brand-100"
                             }`}
-                            aria-label={`Order qty for ${row.sku} on ${col.date}`}
+                            aria-label={`Order qty for ${row.sku} on ${col.date}${
+                              locked ? ` (${lockReason})` : ""
+                            }`}
+                            aria-disabled={locked}
                           />
                         </td>
                       );
