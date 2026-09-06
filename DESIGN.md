@@ -61,7 +61,7 @@ Exact library picks can change; the boundaries above should not.
 - **Roles** (`Role` enum on `User`):
   - **ADMIN** — full access including `/admin` CRUD (users, products, vendors, locations) and approve
   - **MANAGER** — inventory / ordering / approvals; no user admin
-  - **STAFF** — view + edit weekly grid / stock; approve UI soft-restricted (no approve actions)
+  - **STAFF** — view inventory; edit **today’s** weekly grid cells; approve UI soft-restricted (no approve actions); cannot edit on-hand
 
 Default seed admin (`admin@example.com` / `admin12345`) must be changed after first login.
 
@@ -89,8 +89,15 @@ Inventory and ordering UIs support **sort and group by vendor** and **by store l
 - **Rows**: SKUs (filterable; sort/group by vendor or store location)
 - **Columns**: days of the week (configurable week start)
 - **Cells**: quantity to order that day
-- Auto-suggest from min levels can **prefill** cells; users edit freely
+- **Edit lock**: only the column for **today** (business timezone `APP_TIMEZONE`, default `America/New_York`) is editable. Past and future day columns are read-only / visually locked (mock grid included). Server action `updateOrderCell` rejects non-today `orderDate`.
+- Auto-suggest from min levels can **prefill** cells; users edit today’s cells freely
 - Days a vendor cannot accept orders are **blocked/greyed** from that vendor’s schedule
+
+### Stock on hand
+
+- Inventory page shows a single **today’s on-hand** count per SKU × location (not a day-column grid)
+- **ADMIN** / **MANAGER** can edit on-hand; saves `StockLevel.onHand` and a `StockMovement` of type `ADJUST` with the delta
+- **STAFF** can view on-hand; may still edit today’s weekly order cells
 
 ### Auto-reorder
 
@@ -102,7 +109,7 @@ When `on_hand + on_order < min_level` for a SKU × location, the system suggests
 2. For a given **day**, an approver reviews that day’s quantities
 3. Approver edits if needed, then **approves that day**
 4. System splits approved lines by vendor and invokes the right **adapter**
-5. Future days stay editable; only approved days place
+5. Only today’s cells stay editable in the grid; approved days place through the approval flow
 6. Closed vendor days never place
 
 ### Vendor adapters
@@ -138,7 +145,7 @@ All reporting queries hit Postgres. Initial set:
 ## PWA / iPad
 
 - Installable on iPad home screen
-- Touch-friendly: large tap targets, weekly grid usable with finger
+- Touch-friendly: large tap targets, weekly grid usable with finger; locked cells use disabled / muted styling
 - Responsive layout shared with desktop web
 - Later: optional offline read cache; not required for v1
 
@@ -156,10 +163,11 @@ All reporting queries hit Postgres. Initial set:
 
 - Exact Amazon API program (Seller / Vendor Central / Business)
 - Shopify vs generic wholesale portal mechanics per vendor
-- Week-start day and timezone for “order day”
+- Week-start day (Monday UTC for plan keys today); **business “today”** uses `APP_TIMEZONE` (default America/New_York)
 - Whether one PO per vendor-per-day or finer splits
 
 ## Changelog
 
+- **2026-09-05** — Weekly grid: only today editable (past/future locked) via `APP_TIMEZONE`; `updateOrderCell` server guard; Inventory on-hand editable for ADMIN/MANAGER with ADJUST stock movements; mock grid respects today-only.
 - **2026-09-05** — Auth.js Credentials + roles (ADMIN/MANAGER/STAFF); User model + migration; admin CRUD for users/products/vendors/locations; middleware route protection; seeded default admin.
 - **2026-09-05** — Initial design from product planning: stock + multi-vendor orders + reports; web/iPad PWA; weekly grid; min levels; per-day approval; configurable vendor order days; sort by vendor/location.
