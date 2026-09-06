@@ -9,8 +9,19 @@ import {
 } from "@/lib/mock-data";
 import { hasDatabase } from "@/lib/db";
 
+export type InboundLineBadge = {
+  lineId: string;
+  poId: string;
+  fulfillmentStatus: string;
+  remaining: number;
+  quantity: number;
+  receivedQty: number;
+};
+
 export type InventoryRow = {
   id: string;
+  productId?: string;
+  storeLocationId?: string;
   sku: string;
   name: string;
   locationName: string;
@@ -18,6 +29,7 @@ export type InventoryRow = {
   onHand: number;
   onOrder: number;
   minLevel: number;
+  inboundLines?: InboundLineBadge[];
   source: "db" | "mock";
 };
 
@@ -48,6 +60,7 @@ export type ReceivablePoLineView = {
   quantity: number;
   receivedQty: number;
   remaining: number;
+  fulfillmentStatus: string;
 };
 
 export type ReceivablePoView = {
@@ -110,16 +123,50 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
 
   try {
     const prisma = await getPrisma();
-    const levels = await prisma.stockLevel.findMany({
-      include: {
-        product: { include: { vendor: true } },
-        storeLocation: true,
-      },
-      orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
-    });
+    const [levels, openLines] = await Promise.all([
+      prisma.stockLevel.findMany({
+        include: {
+          product: { include: { vendor: true } },
+          storeLocation: true,
+        },
+        orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
+      }),
+      prisma.purchaseOrderLine.findMany({
+        where: {
+          purchaseOrder: {
+            status: { in: ["APPROVED", "SUBMITTED", "PARTIAL"] },
+            storeLocationId: { not: null },
+          },
+          // still inbound until fully received
+          NOT: { fulfillmentStatus: "RECEIVED" },
+        },
+        include: { purchaseOrder: true },
+      }),
+    ]);
+
+    const inboundByKey = new Map<string, InboundLineBadge[]>();
+    for (const line of openLines) {
+      const locId = line.purchaseOrder.storeLocationId;
+      if (!locId) continue;
+      const remaining = Math.max(0, line.quantity - line.receivedQty);
+      if (remaining <= 0) continue;
+      const key = `${line.productId}:${locId}`;
+      const list = inboundByKey.get(key) ?? [];
+      list.push({
+        lineId: line.id,
+        poId: line.purchaseOrderId,
+        fulfillmentStatus: line.fulfillmentStatus,
+        remaining,
+        quantity: line.quantity,
+        receivedQty: line.receivedQty,
+      });
+      inboundByKey.set(key, list);
+    }
 
     return levels.map((level) => ({
       id: level.id,
+      productId: level.productId,
+      storeLocationId: level.storeLocationId,
       sku: level.product.sku,
       name: level.product.name,
       locationName: level.storeLocation.name,
@@ -127,6 +174,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       onHand: level.onHand,
       onOrder: level.onOrder,
       minLevel: level.minLevel,
+      inboundLines: inboundByKey.get(`${level.productId}:${level.storeLocationId}`) ?? [],
       source: "db" as const,
     }));
   } catch (err) {
@@ -340,6 +388,7 @@ export async function getReceivablePurchaseOrders(): Promise<ReceivablePoView[]>
         quantity: line.quantity,
         receivedQty: line.receivedQty,
         remaining: Math.max(0, line.quantity - line.receivedQty),
+        fulfillmentStatus: line.fulfillmentStatus,
       })),
       source: "db" as const,
     }));
