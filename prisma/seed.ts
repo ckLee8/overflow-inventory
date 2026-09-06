@@ -1,4 +1,4 @@
-import { PrismaClient, PurchaseOrderStatus, Role } from "@prisma/client";
+import { PrismaClient, PoLineFulfillmentStatus, PurchaseOrderStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -139,7 +139,7 @@ async function main() {
         productId: towel.id,
         storeLocationId: backStock.id,
         onHand: 40,
-        onOrder: 12,
+        onOrder: 12, // matches SUBMITTED SHIPPED towel line for receiving demo
         minLevel: 20,
         reorderQty: 24,
       },
@@ -222,7 +222,13 @@ async function main() {
       status: PurchaseOrderStatus.DRAFT,
       notes: "Generated from weekly plan (demo)",
       lines: {
-        create: [{ productId: mug.id, quantity: 24 }],
+        create: [
+          {
+            productId: mug.id,
+            quantity: 24,
+            fulfillmentStatus: PoLineFulfillmentStatus.ORDERED,
+          },
+        ],
       },
     },
   });
@@ -233,25 +239,39 @@ async function main() {
       storeLocationId: mainFloor.id,
       orderDate: addDays(weekStart, 2),
       status: PurchaseOrderStatus.APPROVED,
-      notes: "Ready to submit via Shopify adapter — receive full or partial on /receiving",
+      notes: "ORDERED candle line — mark SHIPPED or receive on Inventory #receiving",
       lines: {
-        create: [{ productId: candle.id, quantity: 18 }],
+        create: [
+          {
+            productId: candle.id,
+            quantity: 18,
+            fulfillmentStatus: PoLineFulfillmentStatus.ORDERED,
+          },
+        ],
       },
     },
   });
 
-  // SUBMITTED multi-line PO for partial shipment demo (BACK location)
+  // SUBMITTED multi-line PO: mixed line statuses for receiving demo (BACK location)
   const submittedPo = await prisma.purchaseOrder.create({
     data: {
       vendorId: amazon.id,
       storeLocationId: backStock.id,
       orderDate: addDays(weekStart, 1),
       status: PurchaseOrderStatus.SUBMITTED,
-      notes: "In transit — receive partial lines on /receiving",
+      notes: "Mixed statuses — towel SHIPPED awaiting receive; tape still ORDERED",
       lines: {
         create: [
-          { productId: towel.id, quantity: 12 },
-          { productId: tape.id, quantity: 6 },
+          {
+            productId: towel.id,
+            quantity: 12,
+            fulfillmentStatus: PoLineFulfillmentStatus.SHIPPED,
+          },
+          {
+            productId: tape.id,
+            quantity: 6,
+            fulfillmentStatus: PoLineFulfillmentStatus.ORDERED,
+          },
         ],
       },
     },
