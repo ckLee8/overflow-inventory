@@ -49,14 +49,27 @@ Living product and technical design. Update this file when decisions change.
 | DB | Postgres | Reports, relational stock/PO history |
 | ORM | Prisma or Drizzle | Typed schema, migrations |
 | Jobs | Inngest, Trigger.dev, or a simple worker + queue | Durable place/email/poll without blocking UI |
-| Auth | TBD (Clerk / Auth.js / etc.) | Roles for who can approve |
+| Auth | Auth.js (NextAuth v5) Credentials + JWT | Roles for who can approve; admin-created users only |
 
 Exact library picks can change; the boundaries above should not.
+
+## Auth & roles
+
+- **Provider**: Auth.js v5 Credentials (email + password); passwords hashed with bcryptjs
+- **Sessions**: JWT (MVP); middleware protects all app routes except `/login` and static/PWA assets
+- **No public signup**: only **ADMIN** creates users under `/admin/users`
+- **Roles** (`Role` enum on `User`):
+  - **ADMIN** — full access including `/admin` CRUD (users, products, vendors, locations) and approve
+  - **MANAGER** — inventory / ordering / approvals; no user admin
+  - **STAFF** — view + edit weekly grid / stock; approve UI soft-restricted (no approve actions)
+
+Default seed admin (`admin@example.com` / `admin12345`) must be changed after first login.
 
 ## Domain model
 
 ### Core entities
 
+- **User** — email, name, passwordHash, role, active
 - **Product / SKU** — sellable or orderable item; links to preferred vendor(s)
 - **Store location** — where stock lives; inventory and ordering are location-aware
 - **Stock level** — on-hand, reserved, on-order per SKU × location; **min level** and optional **reorder qty**
@@ -141,7 +154,6 @@ All reporting queries hit Postgres. Initial set:
 
 ## Open decisions
 
-- Auth provider and approval roles
 - Exact Amazon API program (Seller / Vendor Central / Business)
 - Shopify vs generic wholesale portal mechanics per vendor
 - Week-start day and timezone for “order day”
@@ -149,4 +161,5 @@ All reporting queries hit Postgres. Initial set:
 
 ## Changelog
 
+- **2026-09-05** — Auth.js Credentials + roles (ADMIN/MANAGER/STAFF); User model + migration; admin CRUD for users/products/vendors/locations; middleware route protection; seeded default admin.
 - **2026-09-05** — Initial design from product planning: stock + multi-vendor orders + reports; web/iPad PWA; weekly grid; min levels; per-day approval; configurable vendor order days; sort by vendor/location.
