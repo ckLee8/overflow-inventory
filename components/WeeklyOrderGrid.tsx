@@ -1,29 +1,63 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import {
-  getMockWeekColumns,
-  groupOrderRows,
-  mockOrderRows,
-  mockVendors,
-  type GroupBy,
-} from "@/lib/mock-data";
+import { Fragment, useMemo, useState, useTransition } from "react";
+import { updateOrderCell } from "@/lib/actions/ordering";
+import { groupOrderRows, type GroupBy, type MockSkuRow, type MockVendor } from "@/lib/mock-data";
 
-export function WeeklyOrderGrid() {
-  const columns = useMemo(() => getMockWeekColumns(), []);
+export type WeekColumn = { date: string; label: string };
+
+type Props = {
+  planId: string | null;
+  columns: WeekColumn[];
+  rows: MockSkuRow[];
+  vendors: MockVendor[];
+  source: "db" | "mock";
+};
+
+export function WeeklyOrderGrid({ planId, columns, rows, vendors, source }: Props) {
   const [groupBy, setGroupBy] = useState<GroupBy>("vendor");
-  const [qty, setQty] = useState<Record<string, number>>({});
+  const [qty, setQty] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    for (const row of rows) {
+      for (const [date, value] of Object.entries(row.quantities ?? {})) {
+        if (value > 0) initial[`${row.id}:${date}`] = value;
+      }
+    }
+    return initial;
+  });
+  const [status, setStatus] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  const groups = useMemo(() => groupOrderRows(mockOrderRows, groupBy), [groupBy]);
+  const groups = useMemo(() => groupOrderRows(rows, groupBy), [rows, groupBy]);
 
   const vendorBlocked = (vendorName: string, date: string) => {
-    const vendor = mockVendors.find((v) => v.name === vendorName);
+    const vendor = vendors.find((v) => v.name === vendorName);
     if (!vendor) return false;
     const day = new Date(`${date}T00:00:00Z`).getUTCDay();
     return !vendor.orderDaysOfWeek.includes(day);
   };
 
   const cellKey = (rowId: string, date: string) => `${rowId}:${date}`;
+
+  const persistCell = (rowId: string, date: string, value: number) => {
+    if (!planId || source !== "db") {
+      setStatus("Mock mode — changes stay in this browser session only.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await updateOrderCell({
+        planId,
+        rowId,
+        orderDate: date,
+        quantity: value,
+      });
+      if (result.ok) {
+        setStatus(`Saved ${value} for ${date}`);
+      } else {
+        setStatus(result.error);
+      }
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -41,8 +75,12 @@ export function WeeklyOrderGrid() {
           <option value="location">Store location</option>
         </select>
         <p className="text-sm text-slate-500">
-          Placeholder grid with mock SKUs · grey cells = vendor closed that day
+          {source === "db"
+            ? "Live weekly plan from Postgres · grey cells = vendor closed"
+            : "Mock data (set DATABASE_URL to use Prisma) · grey cells = vendor closed"}
+          {pending ? " · saving…" : null}
         </p>
+        {status ? <p className="w-full text-xs text-slate-500">{status}</p> : null}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -63,7 +101,7 @@ export function WeeklyOrderGrid() {
             </tr>
           </thead>
           <tbody>
-            {groups.map(([groupName, rows]) => (
+            {groups.map(([groupName, groupRows]) => (
               <Fragment key={`g-${groupName}`}>
                 <tr className="bg-brand-50">
                   <td
@@ -73,7 +111,7 @@ export function WeeklyOrderGrid() {
                     {groupBy === "vendor" ? "Vendor" : "Location"}: {groupName}
                   </td>
                 </tr>
-                {rows.map((row) => (
+                {groupRows.map((row) => (
                   <tr key={row.id} className="border-t border-slate-100">
                     <td className="sticky left-0 z-10 bg-white px-3 py-2">
                       <div className="font-medium text-slate-900">{row.sku}</div>
@@ -92,6 +130,7 @@ export function WeeklyOrderGrid() {
                           <input
                             type="number"
                             min={0}
+                            inputMode="numeric"
                             disabled={blocked}
                             value={qty[key] ?? ""}
                             placeholder={blocked ? "—" : "0"}
@@ -101,7 +140,12 @@ export function WeeklyOrderGrid() {
                                 [key]: Number(e.target.value) || 0,
                               }))
                             }
-                            className={`min-h-11 w-16 rounded-md border px-2 text-center ${
+                            onBlur={(e) => {
+                              if (blocked) return;
+                              const value = Number(e.target.value) || 0;
+                              persistCell(row.id, col.date, value);
+                            }}
+                            className={`min-h-11 w-16 rounded-md border px-2 text-center touch-manipulation ${
                               blocked
                                 ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                                 : "border-slate-300 bg-white"
