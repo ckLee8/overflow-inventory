@@ -147,7 +147,7 @@ async function main() {
         productId: candle.id,
         storeLocationId: mainFloor.id,
         onHand: 3,
-        onOrder: 6,
+        onOrder: 18, // matches APPROVED PO line for receiving demo
         minLevel: 15,
         reorderQty: 24,
       },
@@ -155,7 +155,7 @@ async function main() {
         productId: tape.id,
         storeLocationId: backStock.id,
         onHand: 2,
-        onOrder: 0,
+        onOrder: 6, // matches SUBMITTED PO line for receiving demo
         minLevel: 10,
         reorderQty: 12,
       },
@@ -233,9 +233,26 @@ async function main() {
       storeLocationId: mainFloor.id,
       orderDate: addDays(weekStart, 2),
       status: PurchaseOrderStatus.APPROVED,
-      notes: "Ready to submit via Shopify adapter",
+      notes: "Ready to submit via Shopify adapter — receive full or partial on /receiving",
       lines: {
         create: [{ productId: candle.id, quantity: 18 }],
+      },
+    },
+  });
+
+  // SUBMITTED multi-line PO for partial shipment demo (BACK location)
+  const submittedPo = await prisma.purchaseOrder.create({
+    data: {
+      vendorId: amazon.id,
+      storeLocationId: backStock.id,
+      orderDate: addDays(weekStart, 1),
+      status: PurchaseOrderStatus.SUBMITTED,
+      notes: "In transit — receive partial lines on /receiving",
+      lines: {
+        create: [
+          { productId: towel.id, quantity: 12 },
+          { productId: tape.id, quantity: 6 },
+        ],
       },
     },
   });
@@ -246,7 +263,7 @@ async function main() {
   console.log(`  vendors: Acme, Shopify Portal, Amazon`);
   console.log(`  products: 4 SKUs with stock levels`);
   console.log(`  weekly plan: ${plan.id} (${weekStart.toISOString().slice(0, 10)})`);
-  console.log(`  POs: draft=${draftPo.id}, approved=${approvedPo.id}`);
+  console.log(`  POs: draft=${draftPo.id}, approved=${approvedPo.id}, submitted=${submittedPo.id}`);
 }
 
 main()
