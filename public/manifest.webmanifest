@@ -1,0 +1,18 @@
+{
+  "name": "Overflow Inventory",
+  "short_name": "Overflow",
+  "description": "Stock tracker and weekly multi-vendor ordering for web and iPad",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
