@@ -40,6 +40,28 @@ export type PurchaseOrderView = {
   source: "db" | "mock";
 };
 
+export type ReceivablePoLineView = {
+  id: string;
+  productId: string;
+  sku: string;
+  productName: string;
+  quantity: number;
+  receivedQty: number;
+  remaining: number;
+};
+
+export type ReceivablePoView = {
+  id: string;
+  vendorName: string;
+  storeLocationId: string | null;
+  storeLocationName: string | null;
+  orderDate: string;
+  status: string;
+  notes: string | null;
+  lines: ReceivablePoLineView[];
+  source: "db" | "mock";
+};
+
 export type WeekColumn = { date: string; label: string };
 
 export type OrderingBundle = {
@@ -277,6 +299,52 @@ export async function getPendingPurchaseOrders(): Promise<PurchaseOrderView[]> {
     }));
   } catch (err) {
     console.error("getPendingPurchaseOrders failed:", err);
+    return [];
+  }
+}
+
+
+export async function getReceivablePurchaseOrders(): Promise<ReceivablePoView[]> {
+  if (!hasDatabase()) {
+    return [];
+  }
+
+  try {
+    const prisma = await getPrisma();
+    const pos = await prisma.purchaseOrder.findMany({
+      where: { status: { in: ["APPROVED", "SUBMITTED", "PARTIAL"] } },
+      include: {
+        vendor: true,
+        storeLocation: true,
+        lines: {
+          include: { product: true },
+          orderBy: { product: { sku: "asc" } },
+        },
+      },
+      orderBy: [{ orderDate: "asc" }, { createdAt: "asc" }],
+    });
+
+    return pos.map((po) => ({
+      id: po.id,
+      vendorName: po.vendor.name,
+      storeLocationId: po.storeLocationId,
+      storeLocationName: po.storeLocation?.name ?? null,
+      orderDate: po.orderDate.toISOString().slice(0, 10),
+      status: po.status,
+      notes: po.notes,
+      lines: po.lines.map((line) => ({
+        id: line.id,
+        productId: line.productId,
+        sku: line.product.sku,
+        productName: line.product.name,
+        quantity: line.quantity,
+        receivedQty: line.receivedQty,
+        remaining: Math.max(0, line.quantity - line.receivedQty),
+      })),
+      source: "db" as const,
+    }));
+  } catch (err) {
+    console.error("getReceivablePurchaseOrders failed:", err);
     return [];
   }
 }
