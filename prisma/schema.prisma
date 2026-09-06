@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  sku         String   @unique
+  name        String
+  description String?
+  vendorId    String?
+  vendor      Vendor?  @relation(fields: [vendorId], references: [id])
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stockLevels      StockLevel[]
+  orderPlanCells   WeeklyOrderPlanCell[]
+  purchaseOrderLines PurchaseOrderLine[]
+  stockMovements   StockMovement[]
+}
+
+model StoreLocation {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stockLevels      StockLevel[]
+  orderPlanCells   WeeklyOrderPlanCell[]
+  purchaseOrders   PurchaseOrder[]
+  stockMovements   StockMovement[]
+}
+
+model StockLevel {
+  id               String   @id @default(cuid())
+  productId        String
+  storeLocationId  String
+  onHand           Int      @default(0)
+  reserved         Int      @default(0)
+  onOrder          Int      @default(0)
+  minLevel         Int      @default(0)
+  reorderQty       Int?
+  updatedAt        DateTime @updatedAt
+
+  product       Product       @relation(fields: [productId], references: [id])
+  storeLocation StoreLocation @relation(fields: [storeLocationId], references: [id])
+
+  @@unique([productId, storeLocationId])
+}
+
+model Vendor {
+  id              String   @id @default(cuid())
+  name            String
+  adapterType     String
+  contactEmail    String?
+  orderDaysOfWeek Int[]    @default([])
+  blackoutDates   DateTime[] @default([])
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model WeeklyOrderPlan {
+  id        String   @id @default(cuid())
+  weekStart DateTime
+  status    String   @default("draft")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cells WeeklyOrderPlanCell[]
+
+  @@unique([weekStart])
+}
+
+model WeeklyOrderPlanCell {
+  id              String   @id @default(cuid())
+  planId          String
+  productId       String
+  storeLocationId String
+  orderDate       DateTime
+  quantity        Int      @default(0)
+
+  plan          WeeklyOrderPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id])
+  storeLocation StoreLocation  @relation(fields: [storeLocationId], references: [id])
+
+  @@unique([planId, productId, storeLocationId, orderDate])
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  SUBMITTED
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id              String              @id @default(cuid())
+  vendorId        String
+  storeLocationId String?
+  orderDate       DateTime
+  status          PurchaseOrderStatus @default(DRAFT)
+  externalRef     String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  vendor        Vendor               @relation(fields: [vendorId], references: [id])
+  storeLocation StoreLocation?       @relation(fields: [storeLocationId], references: [id])
+  lines         PurchaseOrderLine[]
+}
+
+model PurchaseOrderLine {
+  id              String @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  receivedQty     Int    @default(0)
+  unitCost        Decimal? @db.Decimal(12, 4)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+}
+
+enum StockMovementType {
+  ADJUST
+  RECEIVE
+  SELL
+  WASTE
+  TRANSFER
+}
+
+model StockMovement {
+  id              String            @id @default(cuid())
+  productId       String
+  storeLocationId String
+  type            StockMovementType
+  quantity        Int
+  note            String?
+  createdAt       DateTime          @default(now())
+
+  product       Product       @relation(fields: [productId], references: [id])
+  storeLocation StoreLocation @relation(fields: [storeLocationId], references: [id])
+}
