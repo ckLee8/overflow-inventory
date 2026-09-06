@@ -20,8 +20,8 @@ Living product and technical design. Update this file when decisions change.
 ```
 ┌─────────────────────────────┐
 │  Web / iPad PWA (Next.js)   │
-│  inventory · weekly orders  │
-│  approval · receiving       │
+│  inventory (+ receiving)    │
+│  weekly orders · approval   │
 │  reports                    │
 └──────────────┬──────────────┘
                │
@@ -76,7 +76,7 @@ Default seed admin (`admin@example.com` / `admin12345`) must be changed after fi
 - **Stock level** — on-hand, reserved, on-order per SKU × location; **min level** and optional **reorder qty**
 - **Vendor** — Amazon, Shopify/wholesale account, or email/PDF target; credentials; **order-accepting schedule** (days of week + blackout dates)
 - **Weekly order plan** — qty per SKU × location × calendar day for a given week
-- **Purchase order** — one day’s approved slice for one vendor (or equivalent); line items; status
+- **Purchase order** — one day’s approved slice for one vendor (or equivalent); line items; PO status + per-line `fulfillmentStatus` (ORDERED / SHIPPED / RECEIVED)
 - **Stock movement** — audit trail (adjust, receive, sell, waste) for reports
 
 ### Sorting / grouping
@@ -132,21 +132,29 @@ New vendors = new adapter; core ordering stays unchanged.
 
 ### Receiving
 
-When goods arrive, staff with **ADMIN** or **MANAGER** roles open **/receiving** and receive against open POs (status **APPROVED**, **SUBMITTED**, or **PARTIAL** — not RECEIVED/CANCELLED/DRAFT).
+Receiving is consolidated on **Inventory** (`/inventory#receiving`) so staff can confirm deliveries while counting on-hand. `/receiving` redirects to that section; nav “Receiving” links there.
 
-Per PO line the UI shows ordered qty, already received, remaining, and a **receive qty** input (0‥remaining). Submit applies selected lines only — **partial shipments are first-class**.
+Open POs (status **APPROVED**, **SUBMITTED**, or **PARTIAL**) appear in the receiving panel. Per line: ordered / received / remaining, **fulfillment status** badge (`ORDERED` | `SHIPPED` | `RECEIVED`), receive qty, and Mark Shipped/Ordered controls.
+
+**Line fulfillment** (`PurchaseOrderLine.fulfillmentStatus`):
+
+- New lines default to **ORDERED**
+- ADMIN/MANAGER can set **SHIPPED** (or back to **ORDERED**) without receiving
+- On receive: fully received → **RECEIVED**; partial keeps **SHIPPED** if already shipped, else **ORDERED**
 
 On receive (server action `receiveAgainstPo`):
 
-1. Increment `PurchaseOrderLine.receivedQty` (cannot exceed remaining)
+1. Increment `PurchaseOrderLine.receivedQty` (cannot exceed remaining); auto-set line `fulfillmentStatus` as above
 2. Increase `StockLevel.onHand` for product × **PO.storeLocationId**
 3. Decrease `StockLevel.onOrder` by the received amount (floor at 0)
 4. Create `StockMovement` type `RECEIVE` with quantity and note linking the PO id
 5. Update PO status: all lines fully received → `RECEIVED`; some received → `PARTIAL`; else leave
 
+Inventory table shows **Inbound** badges (status + remaining) for open lines matching SKU × location.
+
 **Location rule:** `PurchaseOrder.storeLocationId` is **required** to receive. If null, the action rejects with a clear error — stock must be attributed to a concrete location (no silent default).
 
-**STAFF** may view `/receiving` but cannot submit receives.
+**STAFF** may view inbound badges and open POs but cannot receive or mark shipped; on-hand edit rules unchanged.
 
 ## Reports
 
@@ -169,7 +177,7 @@ All reporting queries hit Postgres. Initial set:
 1. Auth + products + locations + stock adjustments + basic stock report
 2. Vendor schedules + weekly ordering grid + **per-day approval**
 3. Email/PDF PO adapter
-4. Receiving (including partial) — `/receiving` + `receiveAgainstPo`
+4. Receiving (including partial) — Inventory `#receiving` + line fulfillment statuses + `receiveAgainstPo`
 5. Shopify/wholesale adapter
 6. Amazon adapter
 7. iPad PWA polish
@@ -183,6 +191,7 @@ All reporting queries hit Postgres. Initial set:
 
 ## Changelog
 
+- **2026-09-06** — Receiving on Inventory: embed panel at `/inventory#receiving`; `/receiving` redirects; nav links to Inventory section. `PoLineFulfillmentStatus` (ORDERED|SHIPPED|RECEIVED) + migration; mark shipped without receive; auto RECEIVED on full receive; inbound badges on inventory rows; seed mixed statuses.
 - **2026-09-06** — Receiving: `/receiving` UI for APPROVED/SUBMITTED/PARTIAL POs; partial line receives; stock onHand/onOrder + RECEIVE movements; PO status PARTIAL/RECEIVED; requires `storeLocationId` on PO; ADMIN/MANAGER only; seed APPROVED + SUBMITTED POs with matching onOrder.
 - **2026-09-05** — Weekly grid: only today editable (past/future locked) via `APP_TIMEZONE`; `updateOrderCell` server guard; Inventory on-hand editable for ADMIN/MANAGER with ADJUST stock movements; mock grid respects today-only.
 - **2026-09-05** — Auth.js Credentials + roles (ADMIN/MANAGER/STAFF); User model + migration; admin CRUD for users/products/vendors/locations; middleware route protection; seeded default admin.
