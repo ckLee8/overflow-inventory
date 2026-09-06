@@ -139,13 +139,20 @@ model PurchaseOrder {
   lines         PurchaseOrderLine[]
 }
 
+enum PoLineFulfillmentStatus {
+  ORDERED
+  SHIPPED
+  RECEIVED
+}
+
 model PurchaseOrderLine {
-  id              String   @id @default(cuid())
-  purchaseOrderId String
-  productId       String
-  quantity        Int
-  receivedQty     Int      @default(0)
-  unitCost        Decimal? @db.Decimal(12, 4)
+  id                String                  @id @default(cuid())
+  purchaseOrderId   String
+  productId         String
+  quantity          Int
+  receivedQty       Int                     @default(0)
+  fulfillmentStatus PoLineFulfillmentStatus @default(ORDERED)
+  unitCost          Decimal?                @db.Decimal(12, 4)
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product       Product       @relation(fields: [productId], references: [id])
