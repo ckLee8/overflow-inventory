@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/auth";
 import { hasDatabase } from "@/lib/db";
+import { APP_TIMEZONE, isTodayDateString } from "@/lib/timezone";
 
 export type UpdateCellResult =
   | { ok: true; quantity: number }
@@ -10,6 +12,8 @@ export type UpdateCellResult =
 /**
  * Upsert a weekly order plan cell quantity.
  * Row id format from the grid: `${productId}:${storeLocationId}`.
+ * Only the current calendar day in APP_TIMEZONE is writable (past/future rejected).
+ * Any authenticated role (ADMIN / MANAGER / STAFF) may edit today’s cells.
  */
 export async function updateOrderCell(input: {
   planId: string;
@@ -17,8 +21,21 @@ export async function updateOrderCell(input: {
   orderDate: string;
   quantity: number;
 }): Promise<UpdateCellResult> {
+  try {
+    await requireSession();
+  } catch {
+    return { ok: false, error: "Unauthorized" };
+  }
+
   if (!hasDatabase()) {
     return { ok: false, error: "DATABASE_URL not set — cell changes are local-only in mock mode." };
+  }
+
+  if (!isTodayDateString(input.orderDate)) {
+    return {
+      ok: false,
+      error: `Only today’s order qty is editable (${APP_TIMEZONE}). Past and future days are locked.`,
+    };
   }
 
   const qty = Math.max(0, Math.floor(Number(input.quantity) || 0));
