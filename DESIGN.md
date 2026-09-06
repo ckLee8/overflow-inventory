@@ -147,7 +147,7 @@ When multiple open PO lines exist for the same SKU × location, the row shows th
 On receive (server action `receiveAgainstPo`):
 
 1. Increment `PurchaseOrderLine.receivedQty` (cannot exceed remaining); auto-set line `fulfillmentStatus` as above
-2. Increase `StockLevel.onHand` for product × **PO.storeLocationId`
+2. Increase `StockLevel.onHand` for product × **PO.storeLocationId**
 3. Decrease `StockLevel.onOrder` by the received amount (floor at 0)
 4. Create `StockMovement` type `RECEIVE` with quantity and note linking the PO id
 5. Update PO status: all lines fully received → `RECEIVED`; some received → `PARTIAL`; else leave
