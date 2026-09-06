@@ -7,6 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(STAFF)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model Product {
   id          String   @id @default(cuid())
   sku         String   @unique
@@ -18,10 +35,10 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  stockLevels      StockLevel[]
-  orderPlanCells   WeeklyOrderPlanCell[]
+  stockLevels        StockLevel[]
+  orderPlanCells     WeeklyOrderPlanCell[]
   purchaseOrderLines PurchaseOrderLine[]
-  stockMovements   StockMovement[]
+  stockMovements     StockMovement[]
 }
 
 model StoreLocation {
@@ -32,22 +49,22 @@ model StoreLocation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stockLevels      StockLevel[]
-  orderPlanCells   WeeklyOrderPlanCell[]
-  purchaseOrders   PurchaseOrder[]
-  stockMovements   StockMovement[]
+  stockLevels    StockLevel[]
+  orderPlanCells WeeklyOrderPlanCell[]
+  purchaseOrders PurchaseOrder[]
+  stockMovements StockMovement[]
 }
 
 model StockLevel {
-  id               String   @id @default(cuid())
-  productId        String
-  storeLocationId  String
-  onHand           Int      @default(0)
-  reserved         Int      @default(0)
-  onOrder          Int      @default(0)
-  minLevel         Int      @default(0)
-  reorderQty       Int?
-  updatedAt        DateTime @updatedAt
+  id              String   @id @default(cuid())
+  productId       String
+  storeLocationId String
+  onHand          Int      @default(0)
+  reserved        Int      @default(0)
+  onOrder         Int      @default(0)
+  minLevel        Int      @default(0)
+  reorderQty      Int?
+  updatedAt       DateTime @updatedAt
 
   product       Product       @relation(fields: [productId], references: [id])
   storeLocation StoreLocation @relation(fields: [storeLocationId], references: [id])
@@ -56,15 +73,15 @@ model StockLevel {
 }
 
 model Vendor {
-  id              String   @id @default(cuid())
+  id              String     @id @default(cuid())
   name            String
   adapterType     String
   contactEmail    String?
-  orderDaysOfWeek Int[]    @default([])
+  orderDaysOfWeek Int[]      @default([])
   blackoutDates   DateTime[] @default([])
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  active          Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   products       Product[]
   purchaseOrders PurchaseOrder[]
@@ -91,8 +108,8 @@ model WeeklyOrderPlanCell {
   quantity        Int      @default(0)
 
   plan          WeeklyOrderPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  product       Product        @relation(fields: [productId], references: [id])
-  storeLocation StoreLocation  @relation(fields: [storeLocationId], references: [id])
+  product       Product         @relation(fields: [productId], references: [id])
+  storeLocation StoreLocation   @relation(fields: [storeLocationId], references: [id])
 
   @@unique([planId, productId, storeLocationId, orderDate])
 }
@@ -117,17 +134,17 @@ model PurchaseOrder {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  vendor        Vendor               @relation(fields: [vendorId], references: [id])
-  storeLocation StoreLocation?       @relation(fields: [storeLocationId], references: [id])
+  vendor        Vendor              @relation(fields: [vendorId], references: [id])
+  storeLocation StoreLocation?      @relation(fields: [storeLocationId], references: [id])
   lines         PurchaseOrderLine[]
 }
 
 model PurchaseOrderLine {
-  id              String @id @default(cuid())
+  id              String   @id @default(cuid())
   purchaseOrderId String
   productId       String
   quantity        Int
-  receivedQty     Int    @default(0)
+  receivedQty     Int      @default(0)
   unitCost        Decimal? @db.Decimal(12, 4)
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
