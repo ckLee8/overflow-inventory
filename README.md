@@ -14,44 +14,38 @@ See DESIGN.md for architecture.
 ## Prerequisites
 
 - Node.js 20+
-- Postgres database
+- Postgres database (optional: mock fallback if DATABASE_URL missing)
 
 ## How to run
 
-Install packages, configure the database URL from the example env file, migrate the schema, then start the Next.js development server.
+1. npm install (postinstall runs prisma generate)
+2. cp .env.example .env and set DATABASE_URL
+3. npx prisma migrate dev
+4. npm run prisma:seed
+5. npm run dev — http://localhost:3000
+
+Without DATABASE_URL, Inventory/Ordering/Vendors/Reports use lib/mock-data.ts. Ordering cell edits stay in-session only.
 
 ### Scripts
 
-- npm run dev -- Start Next.js dev server
-- npm run build / npm start -- Production build and serve
-- npm run prisma:generate -- Generate Prisma Client
-- npm run prisma:migrate -- Create/apply migrations (dev)
-- npm run prisma:deploy -- Apply migrations (prod)
+- npm run dev / build / start / lint
+- npm run prisma:generate / prisma:migrate / prisma:deploy / prisma:seed
 
 ### App map
 
-- /inventory -- Stock levels (mock data for now)
-- /ordering -- Weekly ordering grid skeleton
-- /approvals -- Per-day approval placeholder
-- /vendors -- Vendor schedules and adapter types
-- /reports -- Below-min and report placeholders
+- /inventory — Prisma StockLevel (mock fallback)
+- /ordering — WeeklyOrderPlan cells; blur saves via server action
+- /approvals — DRAFT/APPROVED POs from DB
+- /vendors — schedules from DB
+- /reports — on-hand + below-min from DB
 
-### Vendor adapters
+### Data layer
 
-Shared interface in lib/vendors/types.ts: canAcceptOrders, createOrder, getStatus.
-
-Stubs under lib/vendors/: email-pdf-po.ts, shopify-wholesale.ts, amazon.ts
+- lib/data.ts — server reads
+- lib/actions/ordering.ts — updateOrderCell
+- lib/mock-data.ts — fallback
+- lib/db.ts — hasDatabase()
 
 ### License
 
-MIT -- see LICENSE
-
-### Setup commands
-
-1. npm install
-2. cp .env.example .env
-3. Edit DATABASE_URL in .env
-4. npx prisma migrate dev
-5. npm run dev
-
-Open http://localhost:3000
+MIT — see LICENSE
