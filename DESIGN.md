@@ -21,7 +21,8 @@ Living product and technical design. Update this file when decisions change.
 ┌─────────────────────────────┐
 │  Web / iPad PWA (Next.js)   │
 │  inventory · weekly orders  │
-│  approval · reports         │
+│  approval · receiving       │
+│  reports                    │
 └──────────────┬──────────────┘
                │
 ┌──────────────▼──────────────┐
@@ -131,7 +132,21 @@ New vendors = new adapter; core ordering stays unchanged.
 
 ### Receiving
 
-When goods arrive, receive against the PO (full or partial). Stock on-hand increases; movements recorded for reports.
+When goods arrive, staff with **ADMIN** or **MANAGER** roles open **/receiving** and receive against open POs (status **APPROVED**, **SUBMITTED**, or **PARTIAL** — not RECEIVED/CANCELLED/DRAFT).
+
+Per PO line the UI shows ordered qty, already received, remaining, and a **receive qty** input (0‥remaining). Submit applies selected lines only — **partial shipments are first-class**.
+
+On receive (server action `receiveAgainstPo`):
+
+1. Increment `PurchaseOrderLine.receivedQty` (cannot exceed remaining)
+2. Increase `StockLevel.onHand` for product × **PO.storeLocationId**
+3. Decrease `StockLevel.onOrder` by the received amount (floor at 0)
+4. Create `StockMovement` type `RECEIVE` with quantity and note linking the PO id
+5. Update PO status: all lines fully received → `RECEIVED`; some received → `PARTIAL`; else leave
+
+**Location rule:** `PurchaseOrder.storeLocationId` is **required** to receive. If null, the action rejects with a clear error — stock must be attributed to a concrete location (no silent default).
+
+**STAFF** may view `/receiving` but cannot submit receives.
 
 ## Reports
 
@@ -154,7 +169,7 @@ All reporting queries hit Postgres. Initial set:
 1. Auth + products + locations + stock adjustments + basic stock report
 2. Vendor schedules + weekly ordering grid + **per-day approval**
 3. Email/PDF PO adapter
-4. Receiving (including partial)
+4. Receiving (including partial) — `/receiving` + `receiveAgainstPo`
 5. Shopify/wholesale adapter
 6. Amazon adapter
 7. iPad PWA polish
@@ -168,6 +183,7 @@ All reporting queries hit Postgres. Initial set:
 
 ## Changelog
 
+- **2026-09-06** — Receiving: `/receiving` UI for APPROVED/SUBMITTED/PARTIAL POs; partial line receives; stock onHand/onOrder + RECEIVE movements; PO status PARTIAL/RECEIVED; requires `storeLocationId` on PO; ADMIN/MANAGER only; seed APPROVED + SUBMITTED POs with matching onOrder.
 - **2026-09-05** — Weekly grid: only today editable (past/future locked) via `APP_TIMEZONE`; `updateOrderCell` server guard; Inventory on-hand editable for ADMIN/MANAGER with ADJUST stock movements; mock grid respects today-only.
 - **2026-09-05** — Auth.js Credentials + roles (ADMIN/MANAGER/STAFF); User model + migration; admin CRUD for users/products/vendors/locations; middleware route protection; seeded default admin.
 - **2026-09-05** — Initial design from product planning: stock + multi-vendor orders + reports; web/iPad PWA; weekly grid; min levels; per-day approval; configurable vendor order days; sort by vendor/location.
