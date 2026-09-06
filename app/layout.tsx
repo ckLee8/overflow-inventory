@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AppNav } from "@/components/AppNav";
+import { auth } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -29,11 +30,25 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const session = await auth();
+
   return (
     <html lang="en">
       <body>
-        <AppNav />
+        <AppNav
+          user={
+            session?.user
+              ? {
+                  name: session.user.name,
+                  email: session.user.email,
+                  role: session.user.role,
+                }
+              : null
+          }
+        />
         <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
       </body>
     </html>
