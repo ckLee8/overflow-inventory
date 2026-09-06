@@ -6,8 +6,6 @@ import { Role } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
-
 function parseRole(value: FormDataEntryValue | null): Role | null {
   const v = String(value ?? "");
   if (v === "ADMIN" || v === "MANAGER" || v === "STAFF") return v;
@@ -44,7 +42,7 @@ function revalidateAdmin() {
   revalidatePath("/reports");
 }
 
-export async function createUser(formData: FormData): Promise<ActionResult> {
+export async function createUser(formData: FormData): Promise<void> {
   await requireAdmin();
   const email = String(formData.get("email") ?? "")
     .trim()
@@ -54,7 +52,8 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
   const role = parseRole(formData.get("role")) ?? Role.STAFF;
 
   if (!email || !name || password.length < 8) {
-    return { ok: false, error: "Name, email, and password (8+ chars) are required." };
+    console.error("Name, email, and password (8+ chars) are required.");
+    return;
   }
 
   try {
@@ -63,14 +62,12 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
       data: { email, name, passwordHash, role, active: true },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not create user (email may already exist)." };
   }
 }
 
-export async function updateUser(formData: FormData): Promise<ActionResult> {
+export async function updateUser(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const email = String(formData.get("email") ?? "")
@@ -82,7 +79,8 @@ export async function updateUser(formData: FormData): Promise<ActionResult> {
   const newPassword = String(formData.get("password") ?? "");
 
   if (!id || !email || !name || !role) {
-    return { ok: false, error: "Missing required fields." };
+    console.error("Missing required fields.");
+    return;
   }
 
   try {
@@ -96,62 +94,64 @@ export async function updateUser(formData: FormData): Promise<ActionResult> {
 
     if (newPassword) {
       if (newPassword.length < 8) {
-        return { ok: false, error: "New password must be at least 8 characters." };
+        console.error("New password must be at least 8 characters.");
+        return;
       }
       data.passwordHash = await bcrypt.hash(newPassword, 10);
     }
 
     await prisma.user.update({ where: { id }, data });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not update user." };
   }
 }
 
-export async function deactivateUser(formData: FormData): Promise<ActionResult> {
+export async function deactivateUser(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
-  if (!id) return { ok: false, error: "Missing user id." };
+  if (!id) {
+    console.error("Missing user id.");
+    return;
+  }
 
   const session = await requireAdmin();
   if (session.user.id === id) {
-    return { ok: false, error: "You cannot deactivate your own account." };
+    console.error("You cannot deactivate your own account.");
+    return;
   }
 
   try {
     await prisma.user.update({ where: { id }, data: { active: false } });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not deactivate user." };
   }
 }
 
-export async function createProduct(formData: FormData): Promise<ActionResult> {
+export async function createProduct(formData: FormData): Promise<void> {
   await requireAdmin();
   const sku = String(formData.get("sku") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
   const vendorId = String(formData.get("vendorId") ?? "").trim() || null;
 
-  if (!sku || !name) return { ok: false, error: "SKU and name are required." };
+  if (!sku || !name) {
+    console.error("SKU and name are required.");
+    return;
+  }
 
   try {
     await prisma.product.create({
       data: { sku, name, description, vendorId, active: true },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not create product (SKU may already exist)." };
   }
 }
 
-export async function updateProduct(formData: FormData): Promise<ActionResult> {
+export async function updateProduct(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const sku = String(formData.get("sku") ?? "").trim();
@@ -160,7 +160,10 @@ export async function updateProduct(formData: FormData): Promise<ActionResult> {
   const vendorId = String(formData.get("vendorId") ?? "").trim() || null;
   const active = formData.get("active") === "on" || formData.get("active") === "true";
 
-  if (!id || !sku || !name) return { ok: false, error: "Missing required fields." };
+  if (!id || !sku || !name) {
+    console.error("Missing required fields.");
+    return;
+  }
 
   try {
     await prisma.product.update({
@@ -168,14 +171,12 @@ export async function updateProduct(formData: FormData): Promise<ActionResult> {
       data: { sku, name, description, vendorId, active },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not update product." };
   }
 }
 
-export async function createVendor(formData: FormData): Promise<ActionResult> {
+export async function createVendor(formData: FormData): Promise<void> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const adapterType = String(formData.get("adapterType") ?? "").trim() || "email_pdf";
@@ -183,21 +184,22 @@ export async function createVendor(formData: FormData): Promise<ActionResult> {
   const orderDaysOfWeek = parseDaysOfWeek(String(formData.get("orderDaysOfWeek") ?? ""));
   const blackoutDates = parseBlackoutDates(String(formData.get("blackoutDates") ?? ""));
 
-  if (!name) return { ok: false, error: "Name is required." };
+  if (!name) {
+    console.error("Name is required.");
+    return;
+  }
 
   try {
     await prisma.vendor.create({
       data: { name, adapterType, contactEmail, orderDaysOfWeek, blackoutDates, active: true },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not create vendor." };
   }
 }
 
-export async function updateVendor(formData: FormData): Promise<ActionResult> {
+export async function updateVendor(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -207,7 +209,10 @@ export async function updateVendor(formData: FormData): Promise<ActionResult> {
   const blackoutDates = parseBlackoutDates(String(formData.get("blackoutDates") ?? ""));
   const active = formData.get("active") === "on" || formData.get("active") === "true";
 
-  if (!id || !name) return { ok: false, error: "Missing required fields." };
+  if (!id || !name) {
+    console.error("Missing required fields.");
+    return;
+  }
 
   try {
     await prisma.vendor.update({
@@ -215,40 +220,42 @@ export async function updateVendor(formData: FormData): Promise<ActionResult> {
       data: { name, adapterType, contactEmail, orderDaysOfWeek, blackoutDates, active },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not update vendor." };
   }
 }
 
-export async function createLocation(formData: FormData): Promise<ActionResult> {
+export async function createLocation(formData: FormData): Promise<void> {
   await requireAdmin();
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
 
-  if (!code || !name) return { ok: false, error: "Code and name are required." };
+  if (!code || !name) {
+    console.error("Code and name are required.");
+    return;
+  }
 
   try {
     await prisma.storeLocation.create({
       data: { code, name, active: true },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not create location (code may already exist)." };
   }
 }
 
-export async function updateLocation(formData: FormData): Promise<ActionResult> {
+export async function updateLocation(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   const code = String(formData.get("code") ?? "").trim().toUpperCase();
   const name = String(formData.get("name") ?? "").trim();
   const active = formData.get("active") === "on" || formData.get("active") === "true";
 
-  if (!id || !code || !name) return { ok: false, error: "Missing required fields." };
+  if (!id || !code || !name) {
+    console.error("Missing required fields.");
+    return;
+  }
 
   try {
     await prisma.storeLocation.update({
@@ -256,9 +263,7 @@ export async function updateLocation(formData: FormData): Promise<ActionResult> 
       data: { code, name, active },
     });
     revalidateAdmin();
-    return { ok: true };
   } catch (err) {
     console.error(err);
-    return { ok: false, error: "Could not update location." };
   }
 }
