@@ -8,19 +8,14 @@ export const dynamic = "force-dynamic";
 
 /**
  * Primary open inbound line for a SKU×location row: prefer SHIPPED over ORDERED
- * so staff receive against what's already in transit. Extra open lines are noted
- * as "+N" beside the inbound badge (clearest single-row UX vs a nested control).
+ * so staff receive against what's already in transit.
  */
-function pickPrimaryInbound(lines: InboundLineBadge[]): {
-  primary: InboundLineBadge | null;
-  extraCount: number;
-} {
+function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null {
   const open = lines.filter((l) => l.remaining > 0);
-  if (open.length === 0) return { primary: null, extraCount: 0 };
+  if (open.length === 0) return null;
   const shipped = open.filter((l) => l.fulfillmentStatus === "SHIPPED");
   const ordered = open.filter((l) => l.fulfillmentStatus === "ORDERED");
-  const primary = shipped[0] ?? ordered[0] ?? open[0];
-  return { primary, extraCount: open.length - 1 };
+  return shipped[0] ?? ordered[0] ?? open[0];
 }
 
 export default async function InventoryPage() {
@@ -42,7 +37,7 @@ export default async function InventoryPage() {
           {canEditStock
             ? " — ADMIN/MANAGER can edit; saves an ADJUST movement."
             : " — view only for STAFF."}{" "}
-          Receive and mark-ship are in-row
+          Expected is read-only (on-order). Receive is in-row
           {canReceive ? " for ADMIN/MANAGER." : " (STAFF view-only)."} Rows with remaining
           inbound are highlighted.
         </p>
@@ -61,16 +56,14 @@ export default async function InventoryPage() {
                 </span>
               </th>
               <th className="px-3 py-3 font-semibold">Min</th>
-              <th className="px-3 py-3 font-semibold">On order</th>
-              <th className="px-3 py-3 font-semibold">Inbound</th>
+              <th className="px-3 py-3 font-semibold">Expected</th>
               <th className="px-3 py-3 font-semibold">Receive</th>
-              <th className="px-3 py-3 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                   No stock levels yet. Run seed.
                 </td>
               </tr>
@@ -78,7 +71,7 @@ export default async function InventoryPage() {
               rows.map((row) => {
                 const below = row.onHand + row.onOrder < row.minLevel;
                 const inbound = row.inboundLines ?? [];
-                const { primary, extraCount } = pickPrimaryInbound(inbound);
+                const primary = pickPrimaryInbound(inbound);
                 const hasRemaining = Boolean(primary && primary.remaining > 0);
                 return (
                   <tr
@@ -107,7 +100,6 @@ export default async function InventoryPage() {
                     <td className="px-3 py-3">{row.onOrder}</td>
                     <InventoryRowActions
                       primary={primary}
-                      extraCount={extraCount}
                       canReceive={canReceive}
                       source={row.source}
                     />
