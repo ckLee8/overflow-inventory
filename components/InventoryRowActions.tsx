@@ -2,10 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  receiveAgainstPo,
-  setPoLineDeliveryIssue,
-} from "@/lib/actions/receiving";
+import { receiveAgainstPo } from "@/lib/actions/receiving";
+import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
 import type { InboundLineBadge } from "@/lib/data";
 
 type Props = {
