@@ -7,15 +7,20 @@ import { APP_TIMEZONE, todayDateString } from "@/lib/timezone";
 export const dynamic = "force-dynamic";
 
 /**
- * Primary open inbound line for a SKU×location row: prefer SHIPPED over ORDERED
- * so staff receive against what's already in transit.
+ * Primary inbound line for a SKU×location row: prefer open SHIPPED over ORDERED;
+ * if none open, fall back to a fully received line (checked + disabled UI).
  */
 function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null {
   const open = lines.filter((l) => l.remaining > 0);
-  if (open.length === 0) return null;
-  const shipped = open.filter((l) => l.fulfillmentStatus === "SHIPPED");
-  const ordered = open.filter((l) => l.fulfillmentStatus === "ORDERED");
-  return shipped[0] ?? ordered[0] ?? open[0];
+  if (open.length > 0) {
+    const shipped = open.filter((l) => l.fulfillmentStatus === "SHIPPED");
+    const ordered = open.filter((l) => l.fulfillmentStatus === "ORDERED");
+    return shipped[0] ?? ordered[0] ?? open[0];
+  }
+  const received = lines.filter(
+    (l) => l.remaining <= 0 && (l.receivedQty > 0 || l.fulfillmentStatus === "RECEIVED"),
+  );
+  return received[0] ?? null;
 }
 
 export default async function InventoryPage() {
@@ -37,9 +42,9 @@ export default async function InventoryPage() {
           {canEditStock
             ? " — ADMIN/MANAGER can edit; saves an ADJUST movement."
             : " — view only for STAFF."}{" "}
-          Expected is read-only (on-order). Receive is in-row
-          {canReceive ? " for ADMIN/MANAGER." : " (STAFF view-only)."} Rows with remaining
-          inbound are highlighted.
+          Expected is read-only (on-order). Receive is a one-way checkbox (remaining qty)
+          {canReceive ? " for ADMIN/MANAGER;" : " (STAFF view-only);"} flag icon marks a
+          delivery issue. Rows with remaining inbound are highlighted.
         </p>
       </div>
 
@@ -99,6 +104,7 @@ export default async function InventoryPage() {
                     <td className="px-3 py-3">{row.minLevel}</td>
                     <td className="px-3 py-3">{row.onOrder}</td>
                     <InventoryRowActions
+                      key={primary?.lineId ?? row.id}
                       primary={primary}
                       canReceive={canReceive}
                       source={row.source}
