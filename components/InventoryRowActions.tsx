@@ -1,37 +1,69 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { receiveAgainstPo } from "@/lib/actions/receiving";
+import {
+  receiveAgainstPo,
+  setPoLineDeliveryIssue,
+} from "@/lib/actions/receiving";
 import type { InboundLineBadge } from "@/lib/data";
 
 type Props = {
-  /** Primary open PO line for this SKU × location (prefer SHIPPED over ORDERED). */
+  /** Primary PO line for this SKU × location (open preferred; else fully received). */
   primary: InboundLineBadge | null;
   canReceive: boolean;
   source: "db" | "mock";
 };
 
+function WarningTriangle({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
+      <path
+        fillRule="evenodd"
+        d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 /**
- * In-row receive controls for the unified Inventory table.
- * One primary open PO line per SKU×location (SHIPPED preferred).
+ * In-row receive: one-way checkbox (receive remaining) + delivery-issue flag.
+ * Unchecking does not reverse stock. ADMIN/MANAGER only; STAFF view-only.
  */
 export function InventoryRowActions({ primary, canReceive, source }: Props) {
-  const [qty, setQty] = useState("");
+  const [justReceived, setJustReceived] = useState(false);
+  const [flagged, setFlagged] = useState(Boolean(primary?.deliveryIssue));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  if (!primary || primary.remaining <= 0) {
+  useEffect(() => {
+    setFlagged(Boolean(primary?.deliveryIssue));
+  }, [primary?.lineId, primary?.deliveryIssue]);
+
+  if (!primary) {
     return <td className="px-3 py-3 text-slate-400">—</td>;
   }
 
   const remaining = primary.remaining;
-  const receiveDisabled =
-    !canReceive || remaining <= 0 || pending || source !== "db";
+  const fullyReceived =
+    justReceived || remaining <= 0 || primary.fulfillmentStatus === "RECEIVED";
+  const hasOpenInbound = remaining > 0 && !justReceived;
+  const dbOk = source === "db";
 
-  const receive = () => {
+  const receiveDisabled =
+    !canReceive || fullyReceived || !hasOpenInbound || pending || !dbOk;
+  const flagDisabled = !canReceive || pending || !dbOk;
+
+  const receiveAll = () => {
     setMessage(null);
     setError(null);
 
@@ -39,29 +71,48 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
       setError("STAFF cannot receive — ask a manager or admin.");
       return;
     }
-    if (source !== "db") {
+    if (!dbOk) {
       setError("Mock mode — receiving requires DATABASE_URL.");
       return;
     }
-
-    const n = Math.max(0, Math.floor(Number(qty) || 0));
-    if (n <= 0) {
-      setError("Enter a receive qty greater than 0.");
-      return;
-    }
-    if (n > remaining) {
-      setError(`Only ${remaining} remaining.`);
-      return;
-    }
+    if (remaining <= 0) return;
 
     startTransition(async () => {
       const result = await receiveAgainstPo({
         purchaseOrderId: primary.poId,
-        lines: [{ lineId: primary.lineId, qty: n }],
+        lines: [{ lineId: primary.lineId, qty: remaining }],
       });
       if (result.ok) {
         setMessage(`+${result.receivedTotal}`);
-        setQty("");
+        setJustReceived(true);
+        router.refresh();
+      } else {
+        setError(result.error);
+      }
+    });
+  };
+
+  const toggleFlag = () => {
+    setMessage(null);
+    setError(null);
+
+    if (!canReceive) {
+      setError("STAFF cannot flag delivery issues.");
+      return;
+    }
+    if (!dbOk) {
+      setError("Mock mode — flagging requires DATABASE_URL.");
+      return;
+    }
+
+    const next = !flagged;
+    startTransition(async () => {
+      const result = await setPoLineDeliveryIssue({
+        lineId: primary.lineId,
+        deliveryIssue: next,
+      });
+      if (result.ok) {
+        setFlagged(result.deliveryIssue);
         router.refresh();
       } else {
         setError(result.error);
@@ -71,36 +122,64 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
 
   return (
     <td className="px-3 py-3">
-      {canReceive ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="sr-only" htmlFor={`recv-${primary.lineId}`}>
-            Receive qty ({remaining} remaining)
-          </label>
-          <input
-            id={`recv-${primary.lineId}`}
-            type="number"
-            min={0}
-            max={remaining}
-            inputMode="numeric"
-            value={qty}
-            disabled={receiveDisabled}
-            placeholder="0"
-            onChange={(e) => setQty(e.target.value)}
-            className="min-h-11 w-20 rounded-md border border-slate-300 bg-white px-2 text-center touch-manipulation disabled:bg-slate-100 disabled:text-slate-400"
-          />
-          <button
-            type="button"
-            onClick={receive}
-            disabled={receiveDisabled}
-            className="min-h-11 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white touch-manipulation hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+      <div className="flex flex-wrap items-center gap-2">
+        {hasOpenInbound || fullyReceived ? (
+          <label
+            className={`inline-flex min-h-11 items-center gap-2 ${
+              receiveDisabled && !fullyReceived ? "opacity-60" : ""
+            }`}
+            title={
+              fullyReceived
+                ? "Fully received"
+                : canReceive
+                  ? `Receive remaining (${remaining})`
+                  : "View only"
+            }
           >
-            {pending ? "…" : "Receive"}
-          </button>
-        </div>
-      ) : (
-        <span className="text-xs text-slate-500">View only</span>
-      )}
-      {message ? <p className="mt-1 text-[10px] text-emerald-700">{message}</p> : null}
+            <input
+              type="checkbox"
+              className="h-5 w-5 rounded border-slate-300 text-brand-600 touch-manipulation focus:ring-brand-500 disabled:cursor-not-allowed"
+              checked={fullyReceived}
+              disabled={receiveDisabled}
+              onChange={(e) => {
+                // One-way: only checking receives; uncheck never reverses stock.
+                if (e.target.checked && hasOpenInbound) {
+                  receiveAll();
+                }
+              }}
+              aria-label={
+                fullyReceived
+                  ? "Received"
+                  : `Receive remaining ${remaining}`
+              }
+            />
+            <span className="sr-only">
+              {fullyReceived ? "Received" : `Receive ${remaining} remaining`}
+            </span>
+          </label>
+        ) : (
+          <span className="text-slate-400">—</span>
+        )}
+
+        <button
+          type="button"
+          title="Flag delivery issue"
+          aria-label="Flag delivery issue"
+          aria-pressed={flagged}
+          disabled={flagDisabled}
+          onClick={toggleFlag}
+          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg touch-manipulation transition disabled:cursor-not-allowed disabled:opacity-50 ${
+            flagged
+              ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+              : "text-slate-400 hover:bg-slate-100 hover:text-slate-500"
+          }`}
+        >
+          <WarningTriangle className="h-5 w-5" />
+        </button>
+      </div>
+      {message ? (
+        <p className="mt-1 text-[10px] text-emerald-700">{message}</p>
+      ) : null}
       {error ? <p className="mt-1 text-[10px] text-red-700">{error}</p> : null}
     </td>
   );
