@@ -10,6 +10,7 @@ import {
 import { hasDatabase } from "@/lib/db";
 
 import type { InventoryRow } from "@/lib/inventoryQuery";
+import { getInventoryRows } from "@/lib/inventoryQuery";
 export type { InboundLineBadge, InventoryRow } from "@/lib/inventoryQuery";
 export { getInventoryRows } from "@/lib/inventoryQuery";
 
