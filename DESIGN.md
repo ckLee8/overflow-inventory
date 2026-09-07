@@ -76,7 +76,7 @@ Default seed admin (`admin@example.com` / `admin12345`) must be changed after fi
 - **Stock level** — on-hand, reserved, on-order per SKU × location; **min level** and optional **reorder qty**
 - **Vendor** — Amazon, Shopify/wholesale account, or email/PDF target; credentials; **order-accepting schedule** (days of week + blackout dates)
 - **Weekly order plan** — qty per SKU × location × calendar day for a given week
-- **Purchase order** — one day’s approved slice for one vendor (or equivalent); line items; PO status + per-line `fulfillmentStatus` (ORDERED / SHIPPED / RECEIVED)
+- **Purchase order** — one day’s approved slice for one vendor (or equivalent); line items; PO status + per-line `fulfillmentStatus` (ORDERED / SHIPPED / RECEIVED) + optional `deliveryIssue` / `deliveryIssueNote`
 - **Stock movement** — audit trail (adjust, receive, sell, waste) for reports
 
 ### Sorting / grouping
@@ -132,29 +132,31 @@ New vendors = new adapter; core ordering stays unchanged.
 
 ### Receiving
 
-**Inventory is a unified table** (one row per SKU × location) with in-row inbound, receive, and mark-ship — no separate receiving panel. `/receiving` redirects to `/inventory`; nav “Receiving” links to `/inventory`.
+**Inventory is a unified table** (one row per SKU × location) with in-row receive — no separate receiving panel and **no Receiving nav item**. `/receiving` may still redirect to `/inventory`.
 
-Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min | Expected (read-only on-order) | Receive (qty + action when rem > 0). Rows with remaining inbound are highlighted.
+Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min | Expected (read-only on-order) | Receive (one-way checkbox + delivery-issue flag). Rows with remaining inbound are highlighted.
 
-When multiple open PO lines exist for the same SKU × location, the row shows the **primary** open line (prefer **SHIPPED** over **ORDERED**) with a compact `+N` for extras.
+When multiple open PO lines exist for the same SKU × location, the row uses the **primary** open line (prefer **SHIPPED** over **ORDERED**). Checking the Receive box calls `receiveAgainstPo` with the **remaining** qty (one-way; uncheck does not reverse stock). Fully received lines show checked + disabled. No open inbound → no checkbox (dash).
+
+**Delivery issue flag** (triangle icon to the right of the checkbox): toggles `PurchaseOrderLine.deliveryIssue` (Boolean, default false) and optional `deliveryIssueNote`. Gray when clear; amber when flagged. Click toggles for MVP (no modal required). Migration: `20260907051500_add_po_line_delivery_issue`.
 
 **Line fulfillment** (`PurchaseOrderLine.fulfillmentStatus`):
 
 - New lines default to **ORDERED**
-- ADMIN/MANAGER can **Mark ship** (ORDERED → SHIPPED) without receiving
+- ADMIN/MANAGER can still mark ship via `updatePoLineFulfillmentStatus` (ORDERED → SHIPPED) when exposed elsewhere
 - On receive: fully received → **RECEIVED**; partial keeps **SHIPPED** if already shipped, else **ORDERED**
 
 On receive (server action `receiveAgainstPo`):
 
 1. Increment `PurchaseOrderLine.receivedQty` (cannot exceed remaining); auto-set line `fulfillmentStatus` as above
-2. Increase `StockLevel.onHand` for product × **PO.storeLocationId**
+2. Increase `StockLevel.onHand` for product × **PO.storeLocationId`
 3. Decrease `StockLevel.onOrder` by the received amount (floor at 0)
 4. Create `StockMovement` type `RECEIVE` with quantity and note linking the PO id
 5. Update PO status: all lines fully received → `RECEIVED`; some received → `PARTIAL`; else leave
 
 **Location rule:** `PurchaseOrder.storeLocationId` is **required** to receive. If null, the action rejects with a clear error — stock must be attributed to a concrete location (no silent default).
 
-**STAFF** may view inbound / receive columns but cannot receive or mark shipped; on-hand edit rules unchanged.
+**STAFF** may view receive checkbox / flag state but cannot toggle; on-hand edit rules unchanged. **ADMIN/MANAGER** receive + flag.
 
 ## Reports
 
@@ -191,6 +193,7 @@ All reporting queries hit Postgres. Initial set:
 
 ## Changelog
 
+- **2026-09-07** — Receive column: one-way checkbox (remaining qty via `receiveAgainstPo`); delivery-issue triangle flag on `PurchaseOrderLine` (`deliveryIssue`, `deliveryIssueNote`) + migration `20260907051500_add_po_line_delivery_issue`; remove Receiving from top nav (`/receiving` redirect optional).
 - **2026-09-06** — Inventory unified table: one row per SKU×location with in-row Inbound / Receive / Mark ship; remove separate receiving panel; `/receiving` → `/inventory`; prefer SHIPPED primary when multiple open lines.
 - **2026-09-06** — Receiving on Inventory: embed panel at `/inventory#receiving`; `/receiving` redirects; nav links to Inventory section. `PoLineFulfillmentStatus` (ORDERED|SHIPPED|RECEIVED) + migration; mark shipped without receive; auto RECEIVED on full receive; inbound badges on inventory rows; seed mixed statuses.
 - **2026-09-06** — Receiving: `/receiving` UI for APPROVED/SUBMITTED/PARTIAL POs; partial line receives; stock onHand/onOrder + RECEIVE movements; PO status PARTIAL/RECEIVED; requires `storeLocationId` on PO; ADMIN/MANAGER only; seed APPROVED + SUBMITTED POs with matching onOrder.
