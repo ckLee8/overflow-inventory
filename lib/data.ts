@@ -9,29 +9,9 @@ import {
 } from "@/lib/mock-data";
 import { hasDatabase } from "@/lib/db";
 
-export type InboundLineBadge = {
-  lineId: string;
-  poId: string;
-  fulfillmentStatus: string;
-  remaining: number;
-  quantity: number;
-  receivedQty: number;
-};
-
-export type InventoryRow = {
-  id: string;
-  productId?: string;
-  storeLocationId?: string;
-  sku: string;
-  name: string;
-  locationName: string;
-  vendorName: string;
-  onHand: number;
-  onOrder: number;
-  minLevel: number;
-  inboundLines?: InboundLineBadge[];
-  source: "db" | "mock";
-};
+import type { InventoryRow } from "@/lib/inventoryQuery";
+export type { InboundLineBadge, InventoryRow } from "@/lib/inventoryQuery";
+export { getInventoryRows } from "@/lib/inventoryQuery";
 
 export type OrderGridRow = MockSkuRow & { source: "db" | "mock" };
 
@@ -104,126 +84,6 @@ function weekColumnsFromStart(start: Date): WeekColumn[] {
 async function getPrisma() {
   const { prisma } = await import("@/lib/prisma");
   return prisma;
-}
-
-export async function getInventoryRows(): Promise<InventoryRow[]> {
-  if (!hasDatabase()) {
-    return mockOrderRows.map((r) => ({
-      id: r.id,
-      sku: r.sku,
-      name: r.name,
-      locationName: r.locationName,
-      vendorName: r.vendorName,
-      onHand: r.onHand,
-      onOrder: r.onOrder,
-      minLevel: r.minLevel,
-      source: "mock" as const,
-    }));
-  }
-
-  try {
-    const prisma = await getPrisma();
-    const { PoLineFulfillmentStatus, PurchaseOrderStatus } = await import("@prisma/client");
-
-    const openPoStatus = {
-      in: [
-        PurchaseOrderStatus.APPROVED,
-        PurchaseOrderStatus.SUBMITTED,
-        PurchaseOrderStatus.PARTIAL,
-      ],
-    } as const;
-
-    const levels = await prisma.stockLevel.findMany({
-      include: {
-        product: { include: { vendor: true } },
-        storeLocation: true,
-      },
-      orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
-    });
-
-    // Inbound lines: open POs with remaining qty. Prefer enum `in` (not top-level NOT)
-    // so Prisma Client validation matches PoLineFulfillmentStatus after migrate+generate.
-    // If the client/DB is briefly out of sync, fall back to open-PO lines and filter in JS.
-    let openLines;
-    try {
-      openLines = await prisma.purchaseOrderLine.findMany({
-        where: {
-          purchaseOrder: {
-            status: openPoStatus,
-            storeLocationId: { not: null },
-          },
-          fulfillmentStatus: {
-            in: [PoLineFulfillmentStatus.ORDERED, PoLineFulfillmentStatus.SHIPPED],
-          },
-        },
-        include: { purchaseOrder: true },
-      });
-    } catch (lineErr) {
-      console.error(
-        "purchaseOrderLine inbound query failed; retrying without fulfillmentStatus filter:",
-        lineErr,
-      );
-      openLines = await prisma.purchaseOrderLine.findMany({
-        where: {
-          purchaseOrder: {
-            status: openPoStatus,
-            storeLocationId: { not: null },
-          },
-        },
-        include: { purchaseOrder: true },
-      });
-    }
-
-    const inboundByKey = new Map<string, InboundLineBadge[]>();
-    for (const line of openLines) {
-      const locId = line.purchaseOrder.storeLocationId;
-      if (!locId) continue;
-      const remaining = Math.max(0, line.quantity - line.receivedQty);
-      if (remaining <= 0) continue;
-      const fulfillmentStatus =
-        (line as { fulfillmentStatus?: string }).fulfillmentStatus ?? "ORDERED";
-      if (fulfillmentStatus === "RECEIVED") continue;
-      const key = `${line.productId}:${locId}`;
-      const list = inboundByKey.get(key) ?? [];
-      list.push({
-        lineId: line.id,
-        poId: line.purchaseOrderId,
-        fulfillmentStatus,
-        remaining,
-        quantity: line.quantity,
-        receivedQty: line.receivedQty,
-      });
-      inboundByKey.set(key, list);
-    }
-
-    return levels.map((level) => ({
-      id: level.id,
-      productId: level.productId,
-      storeLocationId: level.storeLocationId,
-      sku: level.product.sku,
-      name: level.product.name,
-      locationName: level.storeLocation.name,
-      vendorName: level.product.vendor?.name ?? "—",
-      onHand: level.onHand,
-      onOrder: level.onOrder,
-      minLevel: level.minLevel,
-      inboundLines: inboundByKey.get(`${level.productId}:${level.storeLocationId}`) ?? [],
-      source: "db" as const,
-    }));
-  } catch (err) {
-    console.error("getInventoryRows failed, using mock:", err);
-    return mockOrderRows.map((r) => ({
-      id: r.id,
-      sku: r.sku,
-      name: r.name,
-      locationName: r.locationName,
-      vendorName: r.vendorName,
-      onHand: r.onHand,
-      onOrder: r.onOrder,
-      minLevel: r.minLevel,
-      source: "mock" as const,
-    }));
-  }
 }
 
 export async function getVendors(): Promise<VendorView[]> {
