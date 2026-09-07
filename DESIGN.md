@@ -134,7 +134,7 @@ New vendors = new adapter; core ordering stays unchanged.
 
 **Inventory is a unified table** (one row per SKU × location) with in-row inbound, receive, and mark-ship — no separate receiving panel. `/receiving` redirects to `/inventory`; nav “Receiving” links to `/inventory`.
 
-Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min | On order | Inbound (Ordered/Shipped/Received or — + remaining) | Receive (qty + action when rem > 0) | Actions (Mark ship when ORDERED). Rows with remaining inbound are highlighted.
+Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min | Expected (read-only on-order) | Receive (qty + action when rem > 0). Rows with remaining inbound are highlighted.
 
 When multiple open PO lines exist for the same SKU × location, the row shows the **primary** open line (prefer **SHIPPED** over **ORDERED**) with a compact `+N` for extras.
 
