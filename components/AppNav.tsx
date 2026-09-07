@@ -14,7 +14,6 @@ const links = [
   { href: "/inventory", label: "Inventory" },
   { href: "/ordering", label: "Ordering" },
   { href: "/approvals", label: "Approvals" },
-  { href: "/inventory", label: "Receiving" },
   { href: "/vendors", label: "Vendors" },
   { href: "/reports", label: "Reports" },
 ];
@@ -61,11 +60,8 @@ export function AppNav({ user }: { user?: NavUser }) {
         <nav className="flex flex-wrap gap-1">
           {links.map((link) => {
             const pathOnly = link.href.split("#")[0];
-            // Receiving aliases Inventory; highlight Inventory as primary on /inventory.
-            const isReceivingAlias = link.label === "Receiving";
-            const active = isReceivingAlias
-              ? pathname.startsWith("/receiving")
-              : pathname === pathOnly || pathname.startsWith(`${pathOnly}/`);
+            const active =
+              pathname === pathOnly || pathname.startsWith(`${pathOnly}/`);
             return (
               <Link
                 key={link.label}
