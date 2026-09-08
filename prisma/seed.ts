@@ -139,7 +139,7 @@ async function main() {
         productId: towel.id,
         storeLocationId: backStock.id,
         onHand: 40,
-        onOrder: 12, // matches SUBMITTED SHIPPED towel line for receiving demo
+        onOrder: 12, // Expected display — not changed by Receive checkbox
         minLevel: 20,
         reorderQty: 24,
       },
@@ -147,7 +147,7 @@ async function main() {
         productId: candle.id,
         storeLocationId: mainFloor.id,
         onHand: 3,
-        onOrder: 18, // matches APPROVED PO line for receiving demo
+        onOrder: 18, // Expected display — not changed by Receive checkbox
         minLevel: 15,
         reorderQty: 24,
       },
@@ -155,7 +155,7 @@ async function main() {
         productId: tape.id,
         storeLocationId: backStock.id,
         onHand: 2,
-        onOrder: 6, // matches SUBMITTED PO line for receiving demo
+        onOrder: 6, // Expected display — not changed by Receive checkbox
         minLevel: 10,
         reorderQty: 12,
       },
@@ -239,7 +239,7 @@ async function main() {
       storeLocationId: mainFloor.id,
       orderDate: addDays(weekStart, 2),
       status: PurchaseOrderStatus.APPROVED,
-      notes: "ORDERED candle line — Mark ship or Receive in Inventory unified table",
+      notes: "ORDERED candle line — Mark Receive checkbox (markedReceived only; no stock change) in Inventory",
       lines: {
         create: [
           {
@@ -259,7 +259,7 @@ async function main() {
       storeLocationId: backStock.id,
       orderDate: addDays(weekStart, 1),
       status: PurchaseOrderStatus.SUBMITTED,
-      notes: "Mixed statuses — towel SHIPPED (primary for receive); tape still ORDERED",
+      notes: "Mixed statuses — towel SHIPPED (primary for Receive checkbox); tape still ORDERED; markedReceived defaults false",
       lines: {
         create: [
           {
