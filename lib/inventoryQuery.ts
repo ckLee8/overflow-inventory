@@ -59,7 +59,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
         PurchaseOrderStatus.PARTIAL,
         PurchaseOrderStatus.RECEIVED,
       ],
-    } as const;
+    };
 
     const levels = await prisma.stockLevel.findMany({
       include: {
