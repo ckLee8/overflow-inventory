@@ -2,15 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  receiveAgainstPo,
-  reverseReceiveForLine,
-} from "@/lib/actions/receiving";
+import { setLineMarkedReceived } from "@/lib/actions/receiving";
 import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
 import type { InboundLineBadge } from "@/lib/data";
 
 type Props = {
-  /** Primary PO line for this SKU × location (open preferred; else fully received). */
+  /** Primary PO line for this SKU × location (unmarked preferred; else marked). */
   primary: InboundLineBadge | null;
   canReceive: boolean;
   source: "db" | "mock";
@@ -35,16 +32,13 @@ function WarningTriangle({ className }: { className?: string }) {
 }
 
 /**
- * Binary in-row receive checkbox + delivery-issue flag. Checking receives the
- * remaining line qty; unchecking reverses all received qty on that line.
+ * Binary in-row receive checkbox + delivery-issue flag.
+ * Checkbox only toggles PurchaseOrderLine.markedReceived (true/false).
+ * Does not change on-hand, Expected/on-order, or receivedQty.
  * ADMIN/MANAGER only; STAFF view-only.
  */
 export function InventoryRowActions({ primary, canReceive, source }: Props) {
-  const initiallyReceived = Boolean(
-    primary &&
-      (primary.receivedQty >= primary.quantity ||
-        primary.fulfillmentStatus === "RECEIVED"),
-  );
+  const initiallyReceived = Boolean(primary?.markedReceived);
   const [received, setReceived] = useState(initiallyReceived);
   const [flagged, setFlagged] = useState(Boolean(primary?.deliveryIssue));
   const [message, setMessage] = useState<string | null>(null);
@@ -53,27 +47,14 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   const router = useRouter();
 
   useEffect(() => {
-    setReceived(
-      Boolean(
-        primary &&
-          (primary.receivedQty >= primary.quantity ||
-            primary.fulfillmentStatus === "RECEIVED"),
-      ),
-    );
+    setReceived(Boolean(primary?.markedReceived));
     setFlagged(Boolean(primary?.deliveryIssue));
-  }, [
-    primary?.lineId,
-    primary?.quantity,
-    primary?.receivedQty,
-    primary?.fulfillmentStatus,
-    primary?.deliveryIssue,
-  ]);
+  }, [primary?.lineId, primary?.markedReceived, primary?.deliveryIssue]);
 
   if (!primary) {
     return <td className="px-3 py-3 text-slate-400">—</td>;
   }
 
-  const remaining = primary.remaining;
   const dbOk = source === "db";
   const receiveDisabled = !canReceive || pending || !dbOk;
   const flagDisabled = !canReceive || pending || !dbOk;
@@ -83,42 +64,22 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
     setError(null);
 
     if (!canReceive) {
-      setError("STAFF cannot receive — ask a manager or admin.");
+      setError("STAFF cannot mark received — ask a manager or admin.");
       return;
     }
     if (!dbOk) {
-      setError("Mock mode — receiving requires DATABASE_URL.");
+      setError("Mock mode — marking received requires DATABASE_URL.");
       return;
     }
 
-    if (checked) {
-      if (remaining <= 0) return;
-      setReceived(true);
-      startTransition(async () => {
-        const result = await receiveAgainstPo({
-          purchaseOrderId: primary.poId,
-          lines: [{ lineId: primary.lineId, qty: remaining }],
-        });
-        if (result.ok) {
-          setMessage(`+${result.receivedTotal}`);
-          router.refresh();
-        } else {
-          setReceived(false);
-          setError(result.error);
-        }
-      });
-      return;
-    }
-
-    if (primary.receivedQty <= 0) return;
-    setReceived(false);
+    setReceived(checked);
     startTransition(async () => {
-      const result = await reverseReceiveForLine({ lineId: primary.lineId });
+      const result = await setLineMarkedReceived(primary.lineId, checked);
       if (result.ok) {
-        setMessage(`−${result.reversedQty}`);
+        setMessage(checked ? "Marked received" : "Unmarked");
         router.refresh();
       } else {
-        setReceived(true);
+        setReceived(!checked);
         setError(result.error);
       }
     });
@@ -162,10 +123,10 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
           title={
             received
               ? canReceive
-                ? `Reverse all received qty (${primary.receivedQty})`
-                : "Received — view only"
+                ? "Unmark as received (does not change stock)"
+                : "Marked received — view only"
               : canReceive
-                ? `Receive remaining (${remaining})`
+                ? "Mark expected delivery as received (does not change stock)"
                 : "View only"
           }
         >
@@ -177,14 +138,14 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
             onChange={(e) => setReceiveChecked(e.target.checked)}
             aria-label={
               received
-                ? `Reverse ${primary.receivedQty} received`
-                : `Receive remaining ${remaining}`
+                ? "Unmark line as received"
+                : "Mark expected delivery as received"
             }
           />
           <span className="sr-only">
             {received
-              ? `Uncheck to reverse ${primary.receivedQty} received`
-              : `Receive ${remaining} remaining`}
+              ? "Uncheck to unmark as received"
+              : "Check to mark expected delivery as received"}
           </span>
         </label>
 
