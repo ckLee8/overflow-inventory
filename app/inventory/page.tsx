@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Primary inbound line for a SKU×location row: prefer open SHIPPED over ORDERED;
- * if none open, fall back to a fully received line (checked + disabled UI).
+ * if none open, fall back to a fully received line (checked and reversible).
  */
 function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null {
   const open = lines.filter((l) => l.remaining > 0);
@@ -42,7 +42,7 @@ export default async function InventoryPage() {
           {canEditStock
             ? " — ADMIN/MANAGER can edit; saves an ADJUST movement."
             : " — view only for STAFF."}{" "}
-          Expected is read-only (on-order). Receive is a one-way checkbox (remaining qty)
+          Expected is read-only (on-order). Receive is a two-way checkbox (check remaining; uncheck to reverse)
           {canReceive ? " for ADMIN/MANAGER;" : " (STAFF view-only);"} flag icon marks a
           delivery issue. Rows with remaining inbound are highlighted.
         </p>

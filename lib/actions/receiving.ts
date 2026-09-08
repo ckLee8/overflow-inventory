@@ -22,6 +22,16 @@ export type UpdateLineFulfillmentResult =
   | { ok: true; lineId: string; fulfillmentStatus: string }
   | { ok: false; error: string };
 
+export type ReverseReceiveResult =
+  | {
+      ok: true;
+      purchaseOrderId: string;
+      lineId: string;
+      status: string;
+      reversedQty: number;
+    }
+  | { ok: false; error: string };
+
 function revalidateReceivingPaths() {
   revalidatePath("/receiving");
   revalidatePath("/inventory");
@@ -179,7 +189,7 @@ export async function receiveAgainstPo(input: {
             storeLocationId,
             type: StockMovementType.RECEIVE,
             quantity: req.qty,
-            note: `Receive against PO ${po.id}`,
+            note: `Receive against PO ${po.id}, line ${line.id} (from ${line.fulfillmentStatus}; PO ${po.status})`,
           },
         });
 
@@ -316,6 +326,196 @@ export async function updatePoLineFulfillmentStatus(input: {
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Update failed",
+    };
+  }
+}
+
+/**
+ * Reverse every received unit on one PO line. This is the inverse of the binary
+ * Inventory receive checkbox: the line becomes fully unreceived, stock/on-order
+ * are compensated, and the PO is reopened. Delivery-issue fields are untouched.
+ * ADMIN / MANAGER only; STAFF cannot reverse receiving.
+ */
+export async function reverseReceiveForLine(input: {
+  lineId: string;
+}): Promise<ReverseReceiveResult> {
+  try {
+    await requireManagerOrAdmin();
+  } catch {
+    return { ok: false, error: "Forbidden: manager or admin only" };
+  }
+
+  if (!hasDatabase()) {
+    return {
+      ok: false,
+      error: "DATABASE_URL not set — reversing receiving requires Postgres.",
+    };
+  }
+
+  const lineId = String(input.lineId ?? "");
+  if (!lineId) {
+    return { ok: false, error: "Missing line id" };
+  }
+
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const {
+      PurchaseOrderStatus,
+      StockMovementType,
+      PoLineFulfillmentStatus,
+    } = await import("@prisma/client");
+
+    const result = await prisma.$transaction(async (tx) => {
+      const line = await tx.purchaseOrderLine.findUnique({
+        where: { id: lineId },
+        include: { purchaseOrder: { include: { lines: true } } },
+      });
+
+      if (!line) {
+        throw new Error("Purchase order line not found");
+      }
+
+      const po = line.purchaseOrder;
+      const reversibleStatuses: string[] = [
+        PurchaseOrderStatus.APPROVED,
+        PurchaseOrderStatus.SUBMITTED,
+        PurchaseOrderStatus.PARTIAL,
+        PurchaseOrderStatus.RECEIVED,
+      ];
+      if (!reversibleStatuses.includes(po.status)) {
+        throw new Error(`Cannot reverse receiving on PO in status ${po.status}`);
+      }
+      if (!po.storeLocationId) {
+        throw new Error(
+          "PO has no store location. Receiving cannot be reversed without a stock location.",
+        );
+      }
+
+      const reversedQty = line.receivedQty;
+      if (reversedQty <= 0) {
+        throw new Error("This purchase order line has no received quantity to reverse");
+      }
+
+      const receiveMovements = await tx.stockMovement.findMany({
+        where: {
+          productId: line.productId,
+          storeLocationId: po.storeLocationId,
+          type: StockMovementType.RECEIVE,
+          OR: [
+            {
+              note: {
+                startsWith: `Receive against PO ${po.id}, line ${line.id}`,
+              },
+            },
+            { note: { equals: `Receive against PO ${po.id}` } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      const latestReceive = receiveMovements[0] ?? null;
+      const priorLineStatus = latestReceive?.note?.match(
+        /\(from (ORDERED|SHIPPED|RECEIVED);/,
+      )?.[1];
+      const restoredFulfillment =
+        priorLineStatus === PoLineFulfillmentStatus.SHIPPED
+          ? PoLineFulfillmentStatus.SHIPPED
+          : PoLineFulfillmentStatus.ORDERED;
+
+      const cleared = await tx.purchaseOrderLine.updateMany({
+        where: { id: line.id, receivedQty: reversedQty },
+        data: {
+          receivedQty: 0,
+          fulfillmentStatus: restoredFulfillment,
+        },
+      });
+      if (cleared.count !== 1) {
+        throw new Error("Received quantity changed while reversing; refresh and try again");
+      }
+
+      const stock = await tx.stockLevel.findUnique({
+        where: {
+          productId_storeLocationId: {
+            productId: line.productId,
+            storeLocationId: po.storeLocationId,
+          },
+        },
+      });
+      if (!stock) {
+        throw new Error("Stock level not found for this PO line and location");
+      }
+
+      await tx.stockLevel.update({
+        where: { id: stock.id },
+        data: {
+          onHand: Math.max(0, stock.onHand - reversedQty),
+          onOrder: stock.onOrder + reversedQty,
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId: line.productId,
+          storeLocationId: po.storeLocationId,
+          type: StockMovementType.ADJUST,
+          quantity: -reversedQty,
+          note: `Reverse receive against PO ${po.id}, line ${line.id}`,
+        },
+      });
+
+      const otherLines = po.lines.filter((candidate) => candidate.id !== line.id);
+      const anyReceived = otherLines.some((candidate) => candidate.receivedQty > 0);
+      let nextStatus: typeof po.status;
+      if (anyReceived) {
+        nextStatus = PurchaseOrderStatus.PARTIAL;
+      } else {
+        const receiveHistory = await tx.stockMovement.findMany({
+          where: {
+            storeLocationId: po.storeLocationId,
+            type: StockMovementType.RECEIVE,
+            OR: [
+              { note: { startsWith: `Receive against PO ${po.id}, line ` } },
+              { note: { equals: `Receive against PO ${po.id}` } },
+            ],
+          },
+          select: { note: true },
+        });
+        const submittedBeforeReceiving =
+          receiveHistory.some((movement) =>
+            /; PO SUBMITTED\)/.test(movement.note ?? ""),
+          ) ||
+          Boolean(po.externalRef) ||
+          po.status === PurchaseOrderStatus.SUBMITTED ||
+          otherLines.some(
+            (candidate) =>
+              candidate.fulfillmentStatus === PoLineFulfillmentStatus.SHIPPED,
+          );
+        nextStatus = submittedBeforeReceiving
+          ? PurchaseOrderStatus.SUBMITTED
+          : PurchaseOrderStatus.APPROVED;
+      }
+
+      if (nextStatus !== po.status) {
+        await tx.purchaseOrder.update({
+          where: { id: po.id },
+          data: { status: nextStatus },
+        });
+      }
+
+      return {
+        purchaseOrderId: po.id,
+        lineId: line.id,
+        status: nextStatus,
+        reversedQty,
+      };
+    });
+
+    revalidateReceivingPaths();
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error("reverseReceiveForLine failed:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Reverse receive failed",
     };
   }
 }

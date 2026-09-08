@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { receiveAgainstPo } from "@/lib/actions/receiving";
+import {
+  receiveAgainstPo,
+  reverseReceiveForLine,
+} from "@/lib/actions/receiving";
 import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
 import type { InboundLineBadge } from "@/lib/data";
 
@@ -32,11 +35,17 @@ function WarningTriangle({ className }: { className?: string }) {
 }
 
 /**
- * In-row receive: one-way checkbox (receive remaining) + delivery-issue flag.
- * Unchecking does not reverse stock. ADMIN/MANAGER only; STAFF view-only.
+ * Binary in-row receive checkbox + delivery-issue flag. Checking receives the
+ * remaining line qty; unchecking reverses all received qty on that line.
+ * ADMIN/MANAGER only; STAFF view-only.
  */
 export function InventoryRowActions({ primary, canReceive, source }: Props) {
-  const [justReceived, setJustReceived] = useState(false);
+  const initiallyReceived = Boolean(
+    primary &&
+      (primary.receivedQty >= primary.quantity ||
+        primary.fulfillmentStatus === "RECEIVED"),
+  );
+  const [received, setReceived] = useState(initiallyReceived);
   const [flagged, setFlagged] = useState(Boolean(primary?.deliveryIssue));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,24 +53,32 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   const router = useRouter();
 
   useEffect(() => {
+    setReceived(
+      Boolean(
+        primary &&
+          (primary.receivedQty >= primary.quantity ||
+            primary.fulfillmentStatus === "RECEIVED"),
+      ),
+    );
     setFlagged(Boolean(primary?.deliveryIssue));
-  }, [primary?.lineId, primary?.deliveryIssue]);
+  }, [
+    primary?.lineId,
+    primary?.quantity,
+    primary?.receivedQty,
+    primary?.fulfillmentStatus,
+    primary?.deliveryIssue,
+  ]);
 
   if (!primary) {
     return <td className="px-3 py-3 text-slate-400">—</td>;
   }
 
   const remaining = primary.remaining;
-  const fullyReceived =
-    justReceived || remaining <= 0 || primary.fulfillmentStatus === "RECEIVED";
-  const hasOpenInbound = remaining > 0 && !justReceived;
   const dbOk = source === "db";
-
-  const receiveDisabled =
-    !canReceive || fullyReceived || !hasOpenInbound || pending || !dbOk;
+  const receiveDisabled = !canReceive || pending || !dbOk;
   const flagDisabled = !canReceive || pending || !dbOk;
 
-  const receiveAll = () => {
+  const setReceiveChecked = (checked: boolean) => {
     setMessage(null);
     setError(null);
 
@@ -73,18 +90,35 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
       setError("Mock mode — receiving requires DATABASE_URL.");
       return;
     }
-    if (remaining <= 0) return;
 
-    startTransition(async () => {
-      const result = await receiveAgainstPo({
-        purchaseOrderId: primary.poId,
-        lines: [{ lineId: primary.lineId, qty: remaining }],
+    if (checked) {
+      if (remaining <= 0) return;
+      setReceived(true);
+      startTransition(async () => {
+        const result = await receiveAgainstPo({
+          purchaseOrderId: primary.poId,
+          lines: [{ lineId: primary.lineId, qty: remaining }],
+        });
+        if (result.ok) {
+          setMessage(`+${result.receivedTotal}`);
+          router.refresh();
+        } else {
+          setReceived(false);
+          setError(result.error);
+        }
       });
+      return;
+    }
+
+    if (primary.receivedQty <= 0) return;
+    setReceived(false);
+    startTransition(async () => {
+      const result = await reverseReceiveForLine({ lineId: primary.lineId });
       if (result.ok) {
-        setMessage(`+${result.receivedTotal}`);
-        setJustReceived(true);
+        setMessage(`−${result.reversedQty}`);
         router.refresh();
       } else {
+        setReceived(true);
         setError(result.error);
       }
     });
@@ -121,43 +155,38 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   return (
     <td className="px-3 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        {hasOpenInbound || fullyReceived ? (
-          <label
-            className={`inline-flex min-h-11 items-center gap-2 ${
-              receiveDisabled && !fullyReceived ? "opacity-60" : ""
-            }`}
-            title={
-              fullyReceived
-                ? "Fully received"
-                : canReceive
-                  ? `Receive remaining (${remaining})`
-                  : "View only"
+        <label
+          className={`inline-flex min-h-11 items-center gap-2 ${
+            receiveDisabled ? "opacity-60" : ""
+          }`}
+          title={
+            received
+              ? canReceive
+                ? `Reverse all received qty (${primary.receivedQty})`
+                : "Received — view only"
+              : canReceive
+                ? `Receive remaining (${remaining})`
+                : "View only"
+          }
+        >
+          <input
+            type="checkbox"
+            className="h-5 w-5 rounded border-slate-300 text-brand-600 touch-manipulation focus:ring-brand-500 disabled:cursor-not-allowed"
+            checked={received}
+            disabled={receiveDisabled}
+            onChange={(e) => setReceiveChecked(e.target.checked)}
+            aria-label={
+              received
+                ? `Reverse ${primary.receivedQty} received`
+                : `Receive remaining ${remaining}`
             }
-          >
-            <input
-              type="checkbox"
-              className="h-5 w-5 rounded border-slate-300 text-brand-600 touch-manipulation focus:ring-brand-500 disabled:cursor-not-allowed"
-              checked={fullyReceived}
-              disabled={receiveDisabled}
-              onChange={(e) => {
-                // One-way: only checking receives; uncheck never reverses stock.
-                if (e.target.checked && hasOpenInbound) {
-                  receiveAll();
-                }
-              }}
-              aria-label={
-                fullyReceived
-                  ? "Received"
-                  : `Receive remaining ${remaining}`
-              }
-            />
-            <span className="sr-only">
-              {fullyReceived ? "Received" : `Receive ${remaining} remaining`}
-            </span>
-          </label>
-        ) : (
-          <span className="text-slate-400">—</span>
-        )}
+          />
+          <span className="sr-only">
+            {received
+              ? `Uncheck to reverse ${primary.receivedQty} received`
+              : `Receive ${remaining} remaining`}
+          </span>
+        </label>
 
         <button
           type="button"
