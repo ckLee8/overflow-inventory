@@ -9,17 +9,10 @@ import {
 } from "@/lib/mock-data";
 import { hasDatabase } from "@/lib/db";
 
-export type InventoryRow = {
-  id: string;
-  sku: string;
-  name: string;
-  locationName: string;
-  vendorName: string;
-  onHand: number;
-  onOrder: number;
-  minLevel: number;
-  source: "db" | "mock";
-};
+import type { InventoryRow } from "@/lib/inventoryQuery";
+import { getInventoryRows } from "@/lib/inventoryQuery";
+export type { InboundLineBadge, InventoryRow } from "@/lib/inventoryQuery";
+export { getInventoryRows } from "@/lib/inventoryQuery";
 
 export type OrderGridRow = MockSkuRow & { source: "db" | "mock" };
 
@@ -37,6 +30,29 @@ export type PurchaseOrderView = {
   status: string;
   lineCount: number;
   notes: string | null;
+  source: "db" | "mock";
+};
+
+export type ReceivablePoLineView = {
+  id: string;
+  productId: string;
+  sku: string;
+  productName: string;
+  quantity: number;
+  receivedQty: number;
+  remaining: number;
+  fulfillmentStatus: string;
+};
+
+export type ReceivablePoView = {
+  id: string;
+  vendorName: string;
+  storeLocationId: string | null;
+  storeLocationName: string | null;
+  orderDate: string;
+  status: string;
+  notes: string | null;
+  lines: ReceivablePoLineView[];
   source: "db" | "mock";
 };
 
@@ -69,58 +85,6 @@ function weekColumnsFromStart(start: Date): WeekColumn[] {
 async function getPrisma() {
   const { prisma } = await import("@/lib/prisma");
   return prisma;
-}
-
-export async function getInventoryRows(): Promise<InventoryRow[]> {
-  if (!hasDatabase()) {
-    return mockOrderRows.map((r) => ({
-      id: r.id,
-      sku: r.sku,
-      name: r.name,
-      locationName: r.locationName,
-      vendorName: r.vendorName,
-      onHand: r.onHand,
-      onOrder: r.onOrder,
-      minLevel: r.minLevel,
-      source: "mock" as const,
-    }));
-  }
-
-  try {
-    const prisma = await getPrisma();
-    const levels = await prisma.stockLevel.findMany({
-      include: {
-        product: { include: { vendor: true } },
-        storeLocation: true,
-      },
-      orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
-    });
-
-    return levels.map((level) => ({
-      id: level.id,
-      sku: level.product.sku,
-      name: level.product.name,
-      locationName: level.storeLocation.name,
-      vendorName: level.product.vendor?.name ?? "—",
-      onHand: level.onHand,
-      onOrder: level.onOrder,
-      minLevel: level.minLevel,
-      source: "db" as const,
-    }));
-  } catch (err) {
-    console.error("getInventoryRows failed, using mock:", err);
-    return mockOrderRows.map((r) => ({
-      id: r.id,
-      sku: r.sku,
-      name: r.name,
-      locationName: r.locationName,
-      vendorName: r.vendorName,
-      onHand: r.onHand,
-      onOrder: r.onOrder,
-      minLevel: r.minLevel,
-      source: "mock" as const,
-    }));
-  }
 }
 
 export async function getVendors(): Promise<VendorView[]> {
@@ -277,6 +241,53 @@ export async function getPendingPurchaseOrders(): Promise<PurchaseOrderView[]> {
     }));
   } catch (err) {
     console.error("getPendingPurchaseOrders failed:", err);
+    return [];
+  }
+}
+
+
+export async function getReceivablePurchaseOrders(): Promise<ReceivablePoView[]> {
+  if (!hasDatabase()) {
+    return [];
+  }
+
+  try {
+    const prisma = await getPrisma();
+    const pos = await prisma.purchaseOrder.findMany({
+      where: { status: { in: ["APPROVED", "SUBMITTED", "PARTIAL"] } },
+      include: {
+        vendor: true,
+        storeLocation: true,
+        lines: {
+          include: { product: true },
+          orderBy: { product: { sku: "asc" } },
+        },
+      },
+      orderBy: [{ orderDate: "asc" }, { createdAt: "asc" }],
+    });
+
+    return pos.map((po) => ({
+      id: po.id,
+      vendorName: po.vendor.name,
+      storeLocationId: po.storeLocationId,
+      storeLocationName: po.storeLocation?.name ?? null,
+      orderDate: po.orderDate.toISOString().slice(0, 10),
+      status: po.status,
+      notes: po.notes,
+      lines: po.lines.map((line) => ({
+        id: line.id,
+        productId: line.productId,
+        sku: line.product.sku,
+        productName: line.product.name,
+        quantity: line.quantity,
+        receivedQty: line.receivedQty,
+        remaining: Math.max(0, line.quantity - line.receivedQty),
+        fulfillmentStatus: line.fulfillmentStatus,
+      })),
+      source: "db" as const,
+    }));
+  } catch (err) {
+    console.error("getReceivablePurchaseOrders failed:", err);
     return [];
   }
 }

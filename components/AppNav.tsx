@@ -59,10 +59,12 @@ export function AppNav({ user }: { user?: NavUser }) {
         </div>
         <nav className="flex flex-wrap gap-1">
           {links.map((link) => {
-            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            const pathOnly = link.href.split("#")[0];
+            const active =
+              pathname === pathOnly || pathname.startsWith(`${pathOnly}/`);
             return (
               <Link
-                key={link.href}
+                key={link.label}
                 href={link.href}
                 className={`min-h-11 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   active
