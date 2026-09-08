@@ -7,20 +7,18 @@ import { APP_TIMEZONE, todayDateString } from "@/lib/timezone";
 export const dynamic = "force-dynamic";
 
 /**
- * Primary inbound line for a SKU×location row: prefer open SHIPPED over ORDERED;
- * if none open, fall back to a fully received line (checked and reversible).
+ * Primary inbound line for a SKU×location row: prefer unmarked SHIPPED over
+ * ORDERED; if all marked, fall back to a marked line (checkbox reversible).
  */
 function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null {
-  const open = lines.filter((l) => l.remaining > 0);
-  if (open.length > 0) {
-    const shipped = open.filter((l) => l.fulfillmentStatus === "SHIPPED");
-    const ordered = open.filter((l) => l.fulfillmentStatus === "ORDERED");
-    return shipped[0] ?? ordered[0] ?? open[0];
+  if (lines.length === 0) return null;
+  const unmarked = lines.filter((l) => !l.markedReceived);
+  if (unmarked.length > 0) {
+    const shipped = unmarked.filter((l) => l.fulfillmentStatus === "SHIPPED");
+    const ordered = unmarked.filter((l) => l.fulfillmentStatus === "ORDERED");
+    return shipped[0] ?? ordered[0] ?? unmarked[0];
   }
-  const received = lines.filter(
-    (l) => l.remaining <= 0 && (l.receivedQty > 0 || l.fulfillmentStatus === "RECEIVED"),
-  );
-  return received[0] ?? null;
+  return lines[0] ?? null;
 }
 
 export default async function InventoryPage() {
@@ -42,9 +40,11 @@ export default async function InventoryPage() {
           {canEditStock
             ? " — ADMIN/MANAGER can edit; saves an ADJUST movement."
             : " — view only for STAFF."}{" "}
-          Expected is read-only (on-order). Receive is a two-way checkbox (check remaining; uncheck to reverse)
-          {canReceive ? " for ADMIN/MANAGER;" : " (STAFF view-only);"} flag icon marks a
-          delivery issue. Rows with remaining inbound are highlighted.
+          Expected is read-only (on-order). Receive is a two-way checkbox that only marks
+          expected delivery as received (true/false) — it does <strong>not</strong> change
+          on-hand or Expected
+          {canReceive ? " (ADMIN/MANAGER);" : " (STAFF view-only);"} flag icon marks a
+          delivery issue. Rows with unmarked inbound are highlighted.
         </p>
       </div>
 
@@ -77,12 +77,14 @@ export default async function InventoryPage() {
                 const below = row.onHand + row.onOrder < row.minLevel;
                 const inbound = row.inboundLines ?? [];
                 const primary = pickPrimaryInbound(inbound);
-                const hasRemaining = Boolean(primary && primary.remaining > 0);
+                const hasUnmarkedInbound = Boolean(
+                  primary && !primary.markedReceived,
+                );
                 return (
                   <tr
                     key={row.id}
                     className={`border-t border-slate-100 ${
-                      hasRemaining ? "bg-sky-50/70" : ""
+                      hasUnmarkedInbound ? "bg-sky-50/70" : ""
                     }`}
                   >
                     <td className="px-3 py-3">
