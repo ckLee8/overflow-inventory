@@ -5,9 +5,12 @@ export type InboundLineBadge = {
   lineId: string;
   poId: string;
   fulfillmentStatus: string;
+  /** Expected open qty display helper (quantity − receivedQty); checkbox ignores this. */
   remaining: number;
   quantity: number;
   receivedQty: number;
+  /** True/false Receive checkbox state — independent of stock numbers. */
+  markedReceived: boolean;
   deliveryIssue: boolean;
   deliveryIssueNote?: string | null;
 };
@@ -26,7 +29,6 @@ export type InventoryRow = {
   inboundLines?: InboundLineBadge[];
   source: "db" | "mock";
 };
-
 
 async function getPrisma() {
   const { prisma } = await import("@/lib/prisma");
@@ -50,7 +52,9 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
 
   try {
     const prisma = await getPrisma();
-    const { PoLineFulfillmentStatus, PurchaseOrderStatus } = await import("@prisma/client");
+    const { PoLineFulfillmentStatus, PurchaseOrderStatus } = await import(
+      "@prisma/client"
+    );
 
     const inboundPoStatus = {
       in: [
@@ -69,8 +73,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
     });
 
-    // Inbound lines: open + recently received PO lines for checkbox / flag UI.
-    // Include ORDERED|SHIPPED|RECEIVED. Prefer enum `in`; fall back if client/DB lag.
+    // Inbound lines for checkbox / flag UI (ORDERED|SHIPPED|RECEIVED).
     let openLines;
     try {
       openLines = await prisma.purchaseOrderLine.findMany({
@@ -109,16 +112,20 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
     for (const line of openLines) {
       const locId = line.purchaseOrder.storeLocationId;
       if (!locId) continue;
+      if (line.quantity <= 0) continue;
+
       const remaining = Math.max(0, line.quantity - line.receivedQty);
       const fulfillmentStatus =
         (line as { fulfillmentStatus?: string }).fulfillmentStatus ?? "ORDERED";
-      // Keep open remaining lines, and lines that have been received (checked UI / flags).
-      if (remaining <= 0 && line.receivedQty <= 0) continue;
+      const markedReceived = Boolean(
+        (line as { markedReceived?: boolean }).markedReceived,
+      );
       const deliveryIssue = Boolean(
         (line as { deliveryIssue?: boolean }).deliveryIssue,
       );
       const deliveryIssueNote =
-        (line as { deliveryIssueNote?: string | null }).deliveryIssueNote ?? null;
+        (line as { deliveryIssueNote?: string | null }).deliveryIssueNote ??
+        null;
       const key = `${line.productId}:${locId}`;
       const list = inboundByKey.get(key) ?? [];
       list.push({
@@ -128,6 +135,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
         remaining,
         quantity: line.quantity,
         receivedQty: line.receivedQty,
+        markedReceived,
         deliveryIssue,
         deliveryIssueNote,
       });
@@ -145,7 +153,8 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       onHand: level.onHand,
       onOrder: level.onOrder,
       minLevel: level.minLevel,
-      inboundLines: inboundByKey.get(`${level.productId}:${level.storeLocationId}`) ?? [],
+      inboundLines:
+        inboundByKey.get(`${level.productId}:${level.storeLocationId}`) ?? [],
       source: "db" as const,
     }));
   } catch (err) {
