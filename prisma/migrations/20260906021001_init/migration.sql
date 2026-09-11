@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "WeeklyOrderPlanCell_planId_productId_storeLocationId_orderDate_" RENAME TO "WeeklyOrderPlanCell_planId_productId_storeLocationId_orderD_key";
