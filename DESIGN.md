@@ -159,7 +159,32 @@ All reporting queries hit Postgres. Initial set:
 - Open POs and expected receipts
 - Stock movement history over a date range
 
-## PWA / iPad
+## Visual language
+
+Warm paper desk, not a blue SaaS dashboard.
+
+| Token | Value |
+|---|---|
+| Background | `#f3efe6` |
+| Card | `#fbf8f1` |
+| Ink | `#1a1814` |
+| Muted | `#6b645c` |
+| Primary (teal) | `#2f5d56` |
+| Warn / ok / issue | `#9a6b24` / `#2f6b4f` / `#a63d32` |
+| Inbound row | `#dce8e5` |
+| Display type | Fraunces |
+| Body / UI | IBM Plex Sans |
+| SKU / numbers | IBM Plex Mono + `tabular-nums` |
+
+- One accent (teal) for primary actions, active nav, and focus rings
+- Display serif for page titles; uppercase tracked kickers for section labels
+- Cards use a hairline + soft shadow (`shadow-card`), not a blue gradient hero
+- Mobile: sticky header + 5-tab bottom nav (Board, Stock, Order, Approve, Reports); desktop keeps full nav
+- Touch targets stay ≥ 44px; PWA theme color matches primary teal
+
+Implemented in `tailwind.config.ts`, `app/globals.css`, `components/ui.tsx`, and `components/AppNav.tsx`.
+
+
 
 - Installable on iPad home screen
 - Touch-friendly: large tap targets, weekly grid usable with finger; locked cells use disabled / muted styling
@@ -183,8 +208,7 @@ All reporting queries hit Postgres. Initial set:
 - Week-start day (Monday UTC for plan keys today); **business “today”** uses `APP_TIMEZONE` (default America/New_York)
 - Whether one PO per vendor-per-day or finer splits
 
-## Changelog
-
+- **2026-09-12** — Visual restyle: warm paper + teal desk tokens, Fraunces / IBM Plex pairing, shared `components/ui.tsx` primitives, iPad bottom nav, no behavior change.
 - **2026-09-07** — Receive = boolean only: `PurchaseOrderLine.markedReceived` + migration `20260908020000_add_po_line_marked_received`; `setLineMarkedReceived` replaces stock mutations in `receiveAgainstPo` / `reverseReceiveForLine`; on-hand / Expected / `receivedQty` unchanged by checkbox; delivery-issue flag stays independent.
 - **2026-09-07** — Receive column: two-way checkbox (receive remaining; uncheck reverses the line); delivery-issue triangle flag on `PurchaseOrderLine` (`deliveryIssue`, `deliveryIssueNote`) + migration `20260907051500_add_po_line_delivery_issue`; remove Receiving from top nav (`/receiving` redirect optional).
 - **2026-09-06** — Inventory unified table: one row per SKU×location with in-row Inbound / Receive / Mark ship; remove separate receiving panel; `/receiving` → `/inventory`; prefer SHIPPED primary when multiple open lines.

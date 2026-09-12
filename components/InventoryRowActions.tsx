@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { setLineMarkedReceived } from "@/lib/actions/receiving";
 import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
 import type { InboundLineBadge } from "@/lib/data";
+import { cn } from "@/components/ui";
 
 type Props = {
   /** Primary PO line for this SKU × location (unmarked preferred; else marked). */
@@ -52,7 +53,7 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   }, [primary?.lineId, primary?.markedReceived, primary?.deliveryIssue]);
 
   if (!primary) {
-    return <td className="px-3 py-3 text-slate-400">—</td>;
+    return <td className="px-3 py-3 text-muted-foreground">—</td>;
   }
 
   const dbOk = source === "db";
@@ -117,9 +118,7 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
     <td className="px-3 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <label
-          className={`inline-flex min-h-11 items-center gap-2 ${
-            receiveDisabled ? "opacity-60" : ""
-          }`}
+          className={cn("inline-flex min-h-11 items-center gap-2", receiveDisabled && "opacity-60")}
           title={
             received
               ? canReceive
@@ -132,15 +131,11 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
         >
           <input
             type="checkbox"
-            className="h-5 w-5 rounded border-slate-300 text-brand-600 touch-manipulation focus:ring-brand-500 disabled:cursor-not-allowed"
+            className="h-5 w-5 rounded border-input text-primary touch-manipulation accent-primary focus:ring-ring disabled:cursor-not-allowed"
             checked={received}
             disabled={receiveDisabled}
             onChange={(e) => setReceiveChecked(e.target.checked)}
-            aria-label={
-              received
-                ? "Unmark line as received"
-                : "Mark expected delivery as received"
-            }
+            aria-label={received ? "Unmark line as received" : "Mark expected delivery as received"}
           />
           <span className="sr-only">
             {received
@@ -156,19 +151,18 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
           aria-pressed={flagged}
           disabled={flagDisabled}
           onClick={toggleFlag}
-          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg touch-manipulation transition disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={cn(
+            "inline-flex min-h-11 min-w-11 items-center justify-center rounded-md touch-manipulation transition-colors duration-150 ease-smooth disabled:cursor-not-allowed disabled:opacity-50",
             flagged
-              ? "text-amber-600 hover:bg-amber-50 hover:text-amber-700"
-              : "text-slate-400 hover:bg-slate-100 hover:text-slate-500"
-          }`}
+              ? "text-warn hover:bg-warn/10 hover:text-warn"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
         >
           <WarningTriangle className="h-5 w-5" />
         </button>
       </div>
-      {message ? (
-        <p className="mt-1 text-[10px] text-emerald-700">{message}</p>
-      ) : null}
-      {error ? <p className="mt-1 text-[10px] text-red-700">{error}</p> : null}
+      {message ? <p className="mt-1 text-[10px] text-ok">{message}</p> : null}
+      {error ? <p className="mt-1 text-[10px] text-destructive">{error}</p> : null}
     </td>
   );
 }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createLocation, updateLocation } from "@/lib/actions/admin";
+import { Button, Card, Input, Label, PageHead } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -8,56 +9,49 @@ export default async function AdminLocationsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Store locations</h1>
-        <p className="mt-1 text-sm text-slate-600">Locations used for stock levels, ordering, and receiving.</p>
-      </div>
+      <PageHead kicker="Floor · stock locations" title="Store locations">
+        Locations used for stock levels, ordering, and receiving.
+      </PageHead>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold">Add location</h2>
+      <Card className="p-5">
+        <h2 className="font-display text-xl font-medium tracking-tight">Add location</h2>
         <form action={createLocation} className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Code</span>
-            <input name="code" required placeholder="MAIN" className="min-h-11 w-full rounded-lg border border-slate-300 px-3" />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Name</span>
-            <input name="name" required placeholder="Main Floor" className="min-h-11 w-full rounded-lg border border-slate-300 px-3" />
-          </label>
+          <Label>
+            <span className="text-xs font-medium text-muted-foreground">Code</span>
+            <Input name="code" required placeholder="MAIN" className="font-mono" />
+          </Label>
+          <Label>
+            <span className="text-xs font-medium text-muted-foreground">Name</span>
+            <Input name="name" required placeholder="Main Floor" />
+          </Label>
           <div>
-            <button type="submit" className="min-h-11 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
-              Create location
-            </button>
+            <Button type="submit">Create location</Button>
           </div>
         </form>
-      </section>
+      </Card>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Locations</h2>
+        <h2 className="font-display text-xl font-medium tracking-tight">Locations</h2>
         {locations.map((loc) => (
-          <form
-            key={loc.id}
-            action={updateLocation}
-            className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3"
-          >
-            <input type="hidden" name="id" value={loc.id} />
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">Code</span>
-              <input name="code" defaultValue={loc.code} required className="min-h-11 w-full rounded-lg border border-slate-300 px-3" />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">Name</span>
-              <input name="name" defaultValue={loc.name} required className="min-h-11 w-full rounded-lg border border-slate-300 px-3" />
-            </label>
-            <label className="flex min-h-11 items-center gap-2 pt-6">
-              <input type="checkbox" name="active" value="true" defaultChecked={loc.active} className="h-5 w-5" />
-              <span className="text-sm font-medium">Active</span>
-            </label>
-            <div className="sm:col-span-3">
-              <button type="submit" className="min-h-11 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
-                Save
-              </button>
-            </div>
+          <form key={loc.id} action={updateLocation}>
+            <Card className="grid gap-3 p-4 sm:grid-cols-3">
+              <input type="hidden" name="id" value={loc.id} />
+              <Label>
+                <span className="text-xs font-medium text-muted-foreground">Code</span>
+                <Input name="code" defaultValue={loc.code} required className="font-mono" />
+              </Label>
+              <Label>
+                <span className="text-xs font-medium text-muted-foreground">Name</span>
+                <Input name="name" defaultValue={loc.name} required />
+              </Label>
+              <label className="flex min-h-11 items-center gap-2 pt-6">
+                <input type="checkbox" name="active" value="true" defaultChecked={loc.active} className="h-5 w-5 accent-primary" />
+                <span className="text-sm font-medium">Active</span>
+              </label>
+              <div className="sm:col-span-3">
+                <Button type="submit">Save</Button>
+              </div>
+            </Card>
           </form>
         ))}
       </section>

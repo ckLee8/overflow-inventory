@@ -1,7 +1,29 @@
 import type { Metadata, Viewport } from "next";
+import { Fraunces, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { AppNav } from "@/components/AppNav";
 import { auth } from "@/lib/auth";
 import "./globals.css";
+
+const sans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const display = Fraunces({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Overflow Inventory",
@@ -10,7 +32,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Overflow Inventory",
+    title: "Overflow",
   },
   formatDetection: {
     telephone: false,
@@ -23,7 +45,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2563eb",
+  themeColor: "#2f5d56",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -36,7 +58,7 @@ export default async function RootLayout({
   const session = await auth();
 
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${display.variable} ${mono.variable}`}>
       <body>
         <AppNav
           user={
@@ -48,8 +70,9 @@ export default async function RootLayout({
                 }
               : null
           }
-        />
-        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+        >
+          {children}
+        </AppNav>
       </body>
     </html>
   );

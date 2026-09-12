@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Card } from "@/components/ui";
 
 /**
  * Receiving UX lives on Inventory (unified table). Client redirect; hash optional.
@@ -14,12 +15,12 @@ export default function ReceivingPage() {
   }, [router]);
 
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
+    <Card className="border-dashed px-5 py-10 text-center text-muted-foreground">
       Receiving moved to Inventory — redirecting to{" "}
-      <a href="/inventory" className="font-medium text-brand-700 underline-offset-2 hover:underline">
-        /inventory
+      <a href="/inventory" className="font-medium text-primary underline-offset-4 hover:underline">
+        Stock
       </a>
       …
-    </div>
+    </Card>
   );
 }
