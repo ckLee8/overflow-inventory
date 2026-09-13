@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { AppNav } from "@/components/AppNav";
 import { auth } from "@/lib/auth";
+import { getBusinessClock } from "@/lib/clock";
 import "./globals.css";
 
 const sans = IBM_Plex_Sans({
@@ -55,7 +56,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await auth();
+  const [session, clock] = await Promise.all([auth(), getBusinessClock()]);
 
   return (
     <html lang="en" className={`${sans.variable} ${display.variable} ${mono.variable}`}>
@@ -70,6 +71,7 @@ export default async function RootLayout({
                 }
               : null
           }
+          clock={clock}
         >
           {children}
         </AppNav>

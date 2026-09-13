@@ -28,6 +28,12 @@ const cards = [
     title: "Store locations",
     body: "Manage store / stock locations used by inventory and ordering.",
   },
+  {
+    href: "/admin/clock",
+    kicker: "Test",
+    title: "Test clock",
+    body: "Pretend it is another day to unlock that weekly-grid column and walk week boundaries.",
+  },
 ];
 
 export default async function AdminDashboardPage() {

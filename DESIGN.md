@@ -91,6 +91,7 @@ Inventory and ordering UIs support **sort and group by vendor** and **by store l
 - **Columns**: days of the week (configurable week start)
 - **Cells**: quantity to order that day
 - **Edit lock**: only the column for **today** (business timezone `APP_TIMEZONE`, default `America/New_York`) is editable. Past and future day columns are read-only / visually locked (mock grid included). Server action `updateOrderCell` rejects non-today `orderDate`.
+- **Test clock** (ADMIN only, `/admin/clock`): persist `AppSetting.simulated_today` (`YYYY-MM-DD`). `getBusinessClock()` is the source of truth for “today” in the weekly grid, inventory copy, and `updateOrderCell`. The displayed week follows the simulated date. A banner shows while the override is on. Reset (or picking the real calendar date) clears it. Global — every signed-in role sees the same simulated today.
 - Auto-suggest from min levels can **prefill** cells; users edit today’s cells freely
 - Days a vendor cannot accept orders are **blocked/greyed** from that vendor’s schedule
 
@@ -208,6 +209,7 @@ Implemented in `tailwind.config.ts`, `app/globals.css`, `components/ui.tsx`, and
 - Week-start day (Monday UTC for plan keys today); **business “today”** uses `APP_TIMEZONE` (default America/New_York)
 - Whether one PO per vendor-per-day or finer splits
 
+- **2026-09-13** — Admin test clock: `/admin/clock` sets `AppSetting.simulated_today`; `getBusinessClock()` drives weekly-grid locks, week shown, and on-hand “today” copy; banner while override is on.
 - **2026-09-12** — Visual restyle: warm paper + teal desk tokens, Fraunces / IBM Plex pairing, shared `components/ui.tsx` primitives, iPad bottom nav, no behavior change.
 - **2026-09-07** — Receive = boolean only: `PurchaseOrderLine.markedReceived` + migration `20260908020000_add_po_line_marked_received`; `setLineMarkedReceived` replaces stock mutations in `receiveAgainstPo` / `reverseReceiveForLine`; on-hand / Expected / `receivedQty` unchanged by checkbox; delivery-issue flag stays independent.
 - **2026-09-07** — Receive column: two-way checkbox (receive remaining; uncheck reverses the line); delivery-issue triangle flag on `PurchaseOrderLine` (`deliveryIssue`, `deliveryIssueNote`) + migration `20260907051500_add_po_line_delivery_issue`; remove Receiving from top nav (`/receiving` redirect optional).
