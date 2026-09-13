@@ -1,3 +1,4 @@
+import { Badge, Card, PageHead } from "@/components/ui";
 import { getVendors } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -9,31 +10,31 @@ export default async function VendorsPage() {
   const source = vendors[0]?.source ?? "mock";
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Vendors</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Schedules from {source === "db" ? "Postgres" : "mock data"}. Adapter stubs live under{" "}
-          <code className="rounded bg-slate-100 px-1">lib/vendors/</code>: EmailPdfPoAdapter,
-          ShopifyWholesaleAdapter, AmazonAdapter.
-        </p>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div>
+      <PageHead kicker="Schedule · adapters" title="Vendors">
+        Schedules from {source === "db" ? "Postgres" : "mock data"}. Adapter stubs live under{" "}
+        <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">lib/vendors/</code>:
+        EmailPdfPoAdapter, ShopifyWholesaleAdapter, AmazonAdapter.
+      </PageHead>
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {vendors.map((vendor) => (
-          <article
-            key={vendor.id}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h2 className="text-lg font-semibold text-slate-900">{vendor.name}</h2>
-            <p className="mt-1 text-sm text-slate-500">Adapter: {vendor.adapterType}</p>
+          <Card key={vendor.id} className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-xl font-medium tracking-tight text-foreground">
+                {vendor.name}
+              </h2>
+              <Badge tone="primary">{vendor.adapterType.replaceAll("_", " ")}</Badge>
+            </div>
             {vendor.contactEmail ? (
-              <p className="mt-1 text-sm text-slate-500">{vendor.contactEmail}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{vendor.contactEmail}</p>
             ) : null}
-            <p className="mt-3 text-sm text-slate-700">
-              Order days:{" "}
+            <p className="mt-4 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Order days
+            </p>
+            <p className="mt-1 text-sm text-foreground">
               {vendor.orderDaysOfWeek.map((d) => dayNames[d]).join(", ") || "None"}
             </p>
-          </article>
+          </Card>
         ))}
       </div>
     </div>

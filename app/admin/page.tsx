@@ -1,25 +1,30 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHead } from "@/components/ui";
 import { auth } from "@/lib/auth";
 
 const cards = [
   {
     href: "/admin/users",
+    kicker: "Access",
     title: "Users",
     body: "Create accounts, set roles (ADMIN / MANAGER / STAFF), reset passwords, deactivate.",
   },
   {
     href: "/admin/products",
+    kicker: "Catalog",
     title: "Products / SKUs",
     body: "Add and edit products; link each SKU to a preferred vendor.",
   },
   {
     href: "/admin/vendors",
+    kicker: "Adapters",
     title: "Vendors",
     body: "CRUD vendors including order days of week and blackout dates.",
   },
   {
     href: "/admin/locations",
+    kicker: "Floor",
     title: "Store locations",
     body: "Manage store / stock locations used by inventory and ordering.",
   },
@@ -32,22 +37,24 @@ export default async function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Full access for administrators. Managers and staff cannot open these pages.
-        </p>
-      </div>
-      <section className="grid gap-4 sm:grid-cols-2">
+    <div>
+      <PageHead kicker="Admin · catalog" title="Admin">
+        Full access for administrators. Managers and staff cannot open these pages.
+      </PageHead>
+      <section className="grid gap-3 sm:grid-cols-2">
         {cards.map((card) => (
           <Link
             key={card.href}
             href={card.href}
-            className="min-h-28 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-500 hover:shadow-md"
+            className="min-h-28 rounded-xl border border-border bg-card p-5 shadow-card transition-[box-shadow,transform] duration-150 ease-smooth hover:shadow-card-hover active:scale-[0.99]"
           >
-            <h2 className="text-lg font-semibold text-slate-900">{card.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{card.body}</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              {card.kicker}
+            </p>
+            <h2 className="mt-2 font-display text-xl font-medium tracking-tight text-foreground">
+              {card.title}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">{card.body}</p>
           </Link>
         ))}
       </section>

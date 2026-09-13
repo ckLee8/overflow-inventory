@@ -4,8 +4,8 @@
   "description": "Stock tracker and weekly multi-vendor ordering for web and iPad",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "background_color": "#f3efe6",
+  "theme_color": "#2f5d56",
   "orientation": "any",
   "icons": [
     {

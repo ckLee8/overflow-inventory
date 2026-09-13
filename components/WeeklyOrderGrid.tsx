@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState, useTransition } from "react";
 import { updateOrderCell } from "@/lib/actions/ordering";
 import { groupOrderRows, type GroupBy, type MockSkuRow, type MockVendor } from "@/lib/mock-data";
+import { cn, Select, TableWrap } from "@/components/ui";
 
 export type WeekColumn = { date: string; label: string };
 
@@ -80,19 +81,19 @@ export function WeeklyOrderGrid({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium text-slate-700" htmlFor="groupBy">
+        <label className="text-sm font-medium text-foreground" htmlFor="groupBy">
           Group by
         </label>
-        <select
+        <Select
           id="groupBy"
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm"
+          className="w-auto min-w-[12rem]"
           value={groupBy}
           onChange={(e) => setGroupBy(e.target.value as GroupBy)}
         >
           <option value="vendor">Vendor</option>
           <option value="location">Store location</option>
-        </select>
-        <p className="text-sm text-slate-500">
+        </Select>
+        <p className="text-sm text-muted-foreground">
           {source === "db"
             ? "Live weekly plan · only today is editable · grey = locked or vendor closed"
             : "Mock data · only today is editable · grey = locked or vendor closed"}
@@ -100,29 +101,28 @@ export function WeeklyOrderGrid({
           today {todayDate} ({timezone})
           {pending ? " · saving…" : null}
         </p>
-        {status ? <p className="w-full text-xs text-slate-500">{status}</p> : null}
+        {status ? <p className="w-full text-xs text-muted-foreground">{status}</p> : null}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <TableWrap>
         <table className="min-w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-slate-50 text-left">
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-3 font-semibold text-slate-700">
-                SKU
-              </th>
-              <th className="px-3 py-3 font-semibold text-slate-700">Location</th>
-              <th className="px-3 py-3 font-semibold text-slate-700">Stock</th>
+            <tr className="bg-muted/60 text-left text-muted-foreground">
+              <th className="sticky left-0 z-10 bg-muted/90 px-3 py-3 font-medium">SKU</th>
+              <th className="px-3 py-3 font-medium">Location</th>
+              <th className="px-3 py-3 font-medium">Stock</th>
               {columns.map((col) => {
                 const today = isToday(col.date);
                 return (
                   <th
                     key={col.date}
-                    className={`px-3 py-3 text-center font-semibold ${
-                      today ? "bg-brand-50 text-brand-900" : "text-slate-700"
-                    }`}
+                    className={cn(
+                      "px-3 py-3 text-center font-medium",
+                      today ? "bg-inbound text-primary" : "",
+                    )}
                   >
                     <div>{col.label}</div>
-                    <div className="text-xs font-normal text-slate-500">
+                    <div className={cn("text-xs font-normal", today ? "text-primary/80" : "")}>
                       {col.date.slice(5)}
                       {today ? " · today" : " · locked"}
                     </div>
@@ -134,24 +134,24 @@ export function WeeklyOrderGrid({
           <tbody>
             {groups.map(([groupName, groupRows]) => (
               <Fragment key={`g-${groupName}`}>
-                <tr className="bg-brand-50">
+                <tr className="bg-inbound/70">
                   <td
                     colSpan={3 + columns.length}
-                    className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-brand-900"
+                    className="px-3 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-primary"
                   >
                     {groupBy === "vendor" ? "Vendor" : "Location"}: {groupName}
                   </td>
                 </tr>
                 {groupRows.map((row) => (
-                  <tr key={row.id} className="border-t border-slate-100">
-                    <td className="sticky left-0 z-10 bg-white px-3 py-2">
-                      <div className="font-medium text-slate-900">{row.sku}</div>
-                      <div className="text-xs text-slate-500">{row.name}</div>
+                  <tr key={row.id} className="border-t border-border">
+                    <td className="sticky left-0 z-10 bg-card px-3 py-2">
+                      <div className="font-mono text-xs text-muted-foreground">{row.sku}</div>
+                      <div className="font-medium text-foreground">{row.name}</div>
                     </td>
-                    <td className="px-3 py-2 text-slate-600">{row.locationName}</td>
-                    <td className="px-3 py-2 text-slate-600">
+                    <td className="px-3 py-2 text-muted-foreground">{row.locationName}</td>
+                    <td className="px-3 py-2 tabular-nums text-muted-foreground">
                       {row.onHand}
-                      <span className="text-xs text-slate-400"> / min {row.minLevel}</span>
+                      <span className="text-xs"> / min {row.minLevel}</span>
                     </td>
                     {columns.map((col) => {
                       const today = isToday(col.date);
@@ -168,7 +168,7 @@ export function WeeklyOrderGrid({
                       return (
                         <td
                           key={key}
-                          className={`px-2 py-2 text-center ${today && !blocked ? "bg-brand-50/40" : ""}`}
+                          className={cn("px-2 py-2 text-center", today && !blocked ? "bg-inbound/40" : "")}
                         >
                           <input
                             type="number"
@@ -191,11 +191,12 @@ export function WeeklyOrderGrid({
                               const value = Number(e.target.value) || 0;
                               persistCell(row.id, col.date, value);
                             }}
-                            className={`min-h-11 w-16 rounded-md border px-2 text-center touch-manipulation ${
+                            className={cn(
+                              "min-h-11 w-16 rounded-md border px-2 text-center tabular-nums touch-manipulation outline-none",
                               locked
-                                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-80"
-                                : "border-brand-300 bg-white shadow-sm ring-1 ring-brand-100"
-                            }`}
+                                ? "cursor-not-allowed border-border bg-muted text-muted-foreground opacity-80"
+                                : "border-primary/30 bg-card shadow-card ring-1 ring-primary/15 focus-visible:ring-2 focus-visible:ring-ring",
+                            )}
                             aria-label={`Order qty for ${row.sku} on ${col.date}${
                               locked ? ` (${lockReason})` : ""
                             }`}
@@ -210,7 +211,7 @@ export function WeeklyOrderGrid({
             ))}
           </tbody>
         </table>
-      </div>
+      </TableWrap>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { updateStockOnHand } from "@/lib/actions/inventory";
+import { cn } from "@/components/ui";
 
 type Props = {
   stockLevelId: string;
@@ -29,9 +30,7 @@ export function OnHandEditor({
 
   if (!canEdit) {
     return (
-      <span className={belowMin ? "font-semibold text-amber-700" : undefined}>
-        {initialOnHand}
-      </span>
+      <span className={cn("tabular-nums", belowMin && "font-semibold text-warn")}>{initialOnHand}</span>
     );
   }
 
@@ -66,7 +65,7 @@ export function OnHandEditor({
   return (
     <div className="flex flex-col gap-1">
       <label className="sr-only" htmlFor={`onhand-${stockLevelId}`}>
-        Today&apos;s on hand ({todayDate}, {timezone})
+        Today's on hand ({todayDate}, {timezone})
       </label>
       <input
         id={`onhand-${stockLevelId}`}
@@ -83,14 +82,15 @@ export function OnHandEditor({
           }
         }}
         title={`Today's on-hand count (${todayDate}, ${timezone})`}
-        className={`min-h-11 w-20 rounded-md border px-2 text-center touch-manipulation ${
+        className={cn(
+          "min-h-11 w-20 rounded-md border px-2 text-center tabular-nums touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-ring",
           belowMin
-            ? "border-amber-400 bg-amber-50 font-semibold text-amber-900"
-            : "border-slate-300 bg-white"
-        }`}
+            ? "border-warn/40 bg-warn/10 font-semibold text-warn"
+            : "border-input bg-card text-foreground",
+        )}
         aria-label={`Today's on hand for stock ${stockLevelId}`}
       />
-      {status ? <span className="text-[10px] text-slate-500">{status}</span> : null}
+      {status ? <span className="text-[10px] text-muted-foreground">{status}</span> : null}
     </div>
   );
 }
