@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireManagerOrAdmin } from "@/lib/auth";
+import { getBusinessToday } from "@/lib/clock";
 import { hasDatabase } from "@/lib/db";
-import { APP_TIMEZONE, todayDateString } from "@/lib/timezone";
+import { APP_TIMEZONE } from "@/lib/timezone";
 
 export type UpdateOnHandResult =
   | { ok: true; onHand: number; delta: number }
@@ -50,7 +51,7 @@ export async function updateStockOnHand(input: {
       return { ok: true, onHand, delta: 0 };
     }
 
-    const today = todayDateString();
+    const today = await getBusinessToday();
     await prisma.$transaction([
       prisma.stockLevel.update({
         where: { id: level.id },

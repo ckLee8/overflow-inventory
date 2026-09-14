@@ -8,6 +8,8 @@ import {
   type MockVendor,
 } from "@/lib/mock-data";
 import { hasDatabase } from "@/lib/db";
+import { getBusinessToday } from "@/lib/clock";
+import { mondayUtcForDateString } from "@/lib/timezone";
 
 import type { InventoryRow } from "@/lib/inventoryQuery";
 import { getInventoryRows } from "@/lib/inventoryQuery";
@@ -67,12 +69,6 @@ export type OrderingBundle = {
   source: "db" | "mock";
 };
 
-function mondayUtc(d = new Date()): Date {
-  const day = d.getUTCDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + mondayOffset));
-}
-
 function weekColumnsFromStart(start: Date): WeekColumn[] {
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   return Array.from({ length: 7 }, (_, i) => {
@@ -128,7 +124,7 @@ export async function getOrderingBundle(): Promise<OrderingBundle> {
 
   try {
     const prisma = await getPrisma();
-    const weekStart = mondayUtc();
+    const weekStart = mondayUtcForDateString(await getBusinessToday());
     const columns = weekColumnsFromStart(weekStart);
 
     let plan = await prisma.weeklyOrderPlan.findUnique({

@@ -2,8 +2,8 @@ import { InventoryRowActions } from "@/components/InventoryRowActions";
 import { OnHandEditor } from "@/components/OnHandEditor";
 import { PageHead, TableWrap, cn } from "@/components/ui";
 import { auth } from "@/lib/auth";
+import { getBusinessClock } from "@/lib/clock";
 import { getInventoryRows, type InboundLineBadge } from "@/lib/data";
-import { APP_TIMEZONE, todayDateString } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +23,9 @@ function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null 
 }
 
 export default async function InventoryPage() {
-  const [rows, session] = await Promise.all([getInventoryRows(), auth()]);
+  const [rows, session, clock] = await Promise.all([getInventoryRows(), auth(), getBusinessClock()]);
   const source = rows[0]?.source ?? "mock";
-  const todayDate = todayDateString();
+  const todayDate = clock.today;
   const role = session?.user?.role;
   const canEditStock = role === "ADMIN" || role === "MANAGER";
   const canReceive = role === "ADMIN" || role === "MANAGER";
@@ -34,7 +34,8 @@ export default async function InventoryPage() {
     <div>
       <PageHead kicker="Stock · SKU × location" title="Inventory">
         On hand is <strong className="font-medium text-foreground">today's count</strong> ({todayDate},{" "}
-        {APP_TIMEZONE})
+        {clock.timezone}
+        {clock.simulated ? " · test clock" : ""})
         {source === "db" ? " from Postgres." : " (mock fallback — set DATABASE_URL)."}
         {canEditStock
           ? " ADMIN/MANAGER can edit; saves an ADJUST movement."
@@ -93,7 +94,7 @@ export default async function InventoryPage() {
                         canEdit={canEditStock}
                         source={row.source}
                         todayDate={todayDate}
-                        timezone={APP_TIMEZONE}
+                        timezone={clock.timezone}
                         belowMin={below}
                       />
                     </td>

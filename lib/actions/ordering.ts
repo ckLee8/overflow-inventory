@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { isBusinessToday } from "@/lib/clock";
 import { hasDatabase } from "@/lib/db";
-import { APP_TIMEZONE, isTodayDateString } from "@/lib/timezone";
+import { APP_TIMEZONE } from "@/lib/timezone";
 
 export type UpdateCellResult =
   | { ok: true; quantity: number }
@@ -12,7 +13,9 @@ export type UpdateCellResult =
 /**
  * Upsert a weekly order plan cell quantity.
  * Row id format from the grid: `${productId}:${storeLocationId}`.
- * Only the current calendar day in APP_TIMEZONE is writable (past/future rejected).
+ * Only the current calendar day in APP_TIMEZONE is writable (past/future rejected),
+ * unless an admin test clock is set — then that simulated date is writable.
+
  * Any authenticated role (ADMIN / MANAGER / STAFF) may edit today’s cells.
  */
 export async function updateOrderCell(input: {
@@ -31,7 +34,7 @@ export async function updateOrderCell(input: {
     return { ok: false, error: "DATABASE_URL not set — cell changes are local-only in mock mode." };
   }
 
-  if (!isTodayDateString(input.orderDate)) {
+  if (!(await isBusinessToday(input.orderDate))) {
     return {
       ok: false,
       error: `Only today’s order qty is editable (${APP_TIMEZONE}). Past and future days are locked.`,

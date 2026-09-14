@@ -41,6 +41,13 @@ model Product {
   stockMovements     StockMovement[]
 }
 
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
 model StoreLocation {
   id        String   @id @default(cuid())
   code      String   @unique

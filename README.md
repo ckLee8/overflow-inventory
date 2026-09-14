@@ -48,6 +48,7 @@ No public signup — only admins create users (Admin → Users).
 - /login — Credentials sign-in
 - /inventory, /ordering, /approvals, /vendors, /reports
 - /admin — users, products, vendors, locations CRUD (ADMIN only)
+- /admin/clock — ADMIN test clock: pretend it is another day (unlocks that weekly-grid column)
 
 ### License
 

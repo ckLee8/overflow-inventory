@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { signOutAction } from "@/lib/actions/auth";
 import { cn } from "@/components/ui";
+import type { BusinessClock } from "@/lib/clock";
+import { formatLongDateUtc } from "@/lib/timezone";
 
 type NavUser = {
   name?: string | null;
@@ -24,7 +26,15 @@ const more = [
   { href: "/vendors", label: "Vendors", icon: StoreIcon },
 ] as const;
 
-export function AppNav({ user, children }: { user?: NavUser; children: ReactNode }) {
+export function AppNav({
+  user,
+  clock,
+  children,
+}: {
+  user?: NavUser;
+  clock?: BusinessClock | null;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const isLogin = pathname.startsWith("/login");
 
@@ -104,6 +114,29 @@ export function AppNav({ user, children }: { user?: NavUser; children: ReactNode
           ) : null}
         </div>
       </header>
+
+      {clock?.simulated ? (
+        <div className="border-b border-warn/25 bg-warn/10">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm text-warn">
+            <p>
+              Test clock on — the floor thinks today is{" "}
+              <strong className="font-medium">{formatLongDateUtc(clock.today)}</strong>
+              <span className="text-muted-foreground">
+                {" "}
+                (real {formatLongDateUtc(clock.realToday)})
+              </span>
+            </p>
+            {showAdmin ? (
+              <Link
+                href="/admin/clock"
+                className="inline-flex min-h-11 items-center rounded-md bg-secondary px-3 text-sm font-medium text-secondary-foreground hover:bg-muted"
+              >
+                Change day
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <main className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:pb-10">{children}</main>
 
