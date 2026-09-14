@@ -98,12 +98,13 @@ Inventory and ordering UIs support **sort and group by vendor** and **by store l
 ### Stock on hand
 
 - Inventory page shows a single **today’s on-hand** count per SKU × location (not a day-column grid)
+- **Min** is the weekday target for **today** (`StockMinSchedule` per SKU × location × day of week, falling back to `StockLevel.minLevel`). ADMIN configures the week under `/admin/minimums`.
 - **ADMIN** / **MANAGER** can edit on-hand; saves `StockLevel.onHand` and a `StockMovement` of type `ADJUST` with the delta
 - **STAFF** can view on-hand; may still edit today’s weekly order cells
 
 ### Auto-reorder
 
-When `on_hand + on_order < min_level` for a SKU × location, the system suggests quantities (using reorder qty when set). Suggestions respect vendor order windows.
+When `on_hand + expected < today’s min` for a SKU × location, the system suggests quantities (using reorder qty when set). Suggestions respect vendor order windows.
 
 ### Approval and place (per day)
 
@@ -135,11 +136,11 @@ New vendors = new adapter; core ordering stays unchanged.
 
 **Inventory is a unified table** (one row per SKU × location) with in-row receive — no separate receiving panel and **no Receiving nav item**. `/receiving` may still redirect to `/inventory`.
 
-Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min | Expected (read-only on-order) | Receive (two-way checkbox + delivery-issue flag). Rows with **unmarked** inbound are highlighted.
+Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min (today’s weekday) | Expected (open inbound) | Receive (two-way checkbox + delivery-issue flag). Rows with **unmarked** inbound are highlighted.
 
 When multiple open PO lines exist for the same SKU × location, the row uses the **primary** line (prefer unmarked **SHIPPED** over **ORDERED**; marked lines stay available so the checkbox can be unchecked). No open inbound → no checkbox (dash).
 
-**Receive checkbox** toggles `PurchaseOrderLine.markedReceived` (Boolean `@default(false)`): check → `true`, uncheck → `false`. It **does not** change `StockLevel.onHand`, `StockLevel.onOrder` / Expected, or `receivedQty`, and creates **no** stock movements. On hand stays independently editable; Expected stays a display of `onOrder`. Migration: `20260908020000_add_po_line_marked_received`. Server action: `setLineMarkedReceived(lineId, boolean)` (ADMIN/MANAGER). Legacy `receiveAgainstPo` / `reverseReceiveForLine` are gutted (no ledger) and forward to that setter.
+**Receive checkbox** toggles `PurchaseOrderLine.markedReceived` and `markedReceivedOn` (the business date it was checked). It does **not** change `StockLevel.onHand` or `receivedQty`, and creates **no** stock movements. **Expected** is the sum of still-active inbound remaining qty: a line counts on the day it is marked received, then drops off **the next day** (Expected goes to 0 when every inbound line for that SKU × location was received on a prior day). Uncheck restores Expected. Migration: `20260914010000_expected_reset_and_daily_mins` (`markedReceivedOn` + `StockMinSchedule`). Server action: `setLineMarkedReceived(lineId, boolean)` (ADMIN/MANAGER). Legacy `receiveAgainstPo` / `reverseReceiveForLine` are gutted (no ledger) and forward to that setter.
 
 **Delivery issue flag** (triangle icon to the right of the checkbox): toggles `PurchaseOrderLine.deliveryIssue` (Boolean, default false) and optional `deliveryIssueNote`. Independent of `markedReceived`. Gray when clear; amber when flagged. Click toggles for MVP (no modal required). Migration: `20260907051500_add_po_line_delivery_issue`.
 
@@ -147,7 +148,7 @@ When multiple open PO lines exist for the same SKU × location, the row uses the
 
 - New lines default to **ORDERED**
 - ADMIN/MANAGER can still mark ship via `updatePoLineFulfillmentStatus` (ORDERED → SHIPPED) when exposed elsewhere
-- Receive checkbox does **not** invent stock; it only sets `markedReceived`. Optionally the PO header reflects marks: all lines marked → `RECEIVED`; some → `PARTIAL`; none after prior PARTIAL/RECEIVED → `SUBMITTED` (if any SHIPPED) else `APPROVED`
+- Receive checkbox does **not** invent stock; it only sets `markedReceived` / `markedReceivedOn`. Expected follows the next-day rule above. Optionally the PO header reflects marks: all lines marked → `RECEIVED`; some → `PARTIAL`; none after prior PARTIAL/RECEIVED → `SUBMITTED` (if any SHIPPED) else `APPROVED`
 
 **STAFF** may view receive checkbox / flag state but cannot toggle; on-hand edit rules unchanged. **ADMIN/MANAGER** mark received + flag.
 
@@ -209,6 +210,7 @@ Implemented in `tailwind.config.ts`, `app/globals.css`, `components/ui.tsx`, and
 - Week-start day (Monday UTC for plan keys today); **business “today”** uses `APP_TIMEZONE` (default America/New_York)
 - Whether one PO per vendor-per-day or finer splits
 
+- **2026-09-14** — Expected clears the day after Receive (`markedReceivedOn`); weekday mins per SKU × location via `StockMinSchedule` + `/admin/minimums`. Migration `20260914010000_expected_reset_and_daily_mins`.
 - **2026-09-13** — Admin test clock: `/admin/clock` sets `AppSetting.simulated_today`; `getBusinessClock()` drives weekly-grid locks, week shown, and on-hand “today” copy; banner while override is on.
 - **2026-09-12** — Visual restyle: warm paper + teal desk tokens, Fraunces / IBM Plex pairing, shared `components/ui.tsx` primitives, iPad bottom nav, no behavior change.
 - **2026-09-07** — Receive = boolean only: `PurchaseOrderLine.markedReceived` + migration `20260908020000_add_po_line_marked_received`; `setLineMarkedReceived` replaces stock mutations in `receiveAgainstPo` / `reverseReceiveForLine`; on-hand / Expected / `receivedQty` unchanged by checkbox; delivery-issue flag stays independent.

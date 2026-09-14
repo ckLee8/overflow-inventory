@@ -9,7 +9,7 @@ import {
 } from "@/lib/mock-data";
 import { hasDatabase } from "@/lib/db";
 import { getBusinessToday } from "@/lib/clock";
-import { mondayUtcForDateString } from "@/lib/timezone";
+import { mondayUtcForDateString, weekdayUtc } from "@/lib/timezone";
 
 import type { InventoryRow } from "@/lib/inventoryQuery";
 import { getInventoryRows } from "@/lib/inventoryQuery";
@@ -124,7 +124,9 @@ export async function getOrderingBundle(): Promise<OrderingBundle> {
 
   try {
     const prisma = await getPrisma();
-    const weekStart = mondayUtcForDateString(await getBusinessToday());
+    const today = await getBusinessToday();
+    const todayDow = weekdayUtc(today);
+    const weekStart = mondayUtcForDateString(today);
     const columns = weekColumnsFromStart(weekStart);
 
     let plan = await prisma.weeklyOrderPlan.findUnique({
@@ -139,7 +141,7 @@ export async function getOrderingBundle(): Promise<OrderingBundle> {
       });
     }
 
-    const [levels, vendors] = await Promise.all([
+    const [levels, vendors, minSchedules] = await Promise.all([
       prisma.stockLevel.findMany({
         include: {
           product: { include: { vendor: true } },
@@ -148,7 +150,16 @@ export async function getOrderingBundle(): Promise<OrderingBundle> {
         orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
       }),
       prisma.vendor.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+      prisma.stockMinSchedule.findMany().catch((err: unknown) => {
+        console.error("stockMinSchedule query failed; using StockLevel.minLevel:", err);
+        return [] as { productId: string; storeLocationId: string; dayOfWeek: number; minLevel: number }[];
+      }),
     ]);
+
+    const minByKey = new Map<string, number>();
+    for (const row of minSchedules) {
+      minByKey.set(`${row.productId}:${row.storeLocationId}:${row.dayOfWeek}`, row.minLevel);
+    }
 
     const cellMap = new Map<string, number>();
     for (const cell of plan.cells) {
@@ -172,7 +183,9 @@ export async function getOrderingBundle(): Promise<OrderingBundle> {
         locationName: level.storeLocation.name,
         onHand: level.onHand,
         onOrder: level.onOrder,
-        minLevel: level.minLevel,
+        minLevel:
+          minByKey.get(`${level.productId}:${level.storeLocationId}:${todayDow}`) ??
+          level.minLevel,
         quantities,
         source: "db" as const,
       };
@@ -290,7 +303,7 @@ export async function getReceivablePurchaseOrders(): Promise<ReceivablePoView[]>
 
 export async function getBelowMinRows(): Promise<InventoryRow[]> {
   const rows = await getInventoryRows();
-  return rows.filter((r) => r.onHand + r.onOrder < r.minLevel);
+  return rows.filter((r) => r.onHand + r.expected < r.minLevel);
 }
 
 export async function getOnHandSummary(): Promise<{
@@ -303,9 +316,59 @@ export async function getOnHandSummary(): Promise<{
   return {
     totalSkus: rows.length,
     totalOnHand: rows.reduce((sum, r) => sum + r.onHand, 0),
-    belowMin: rows.filter((r) => r.onHand + r.onOrder < r.minLevel).length,
+    belowMin: rows.filter((r) => r.onHand + r.expected < r.minLevel).length,
     source: rows[0]?.source ?? "mock",
   };
+}
+
+export type DailyMinRow = {
+  productId: string;
+  storeLocationId: string;
+  sku: string;
+  name: string;
+  locationName: string;
+  defaultMin: number;
+  /** min for dayOfWeek 0–6 (Sun–Sat). Missing days fall back to defaultMin in the UI. */
+  mins: Partial<Record<number, number>>;
+};
+
+export async function getDailyMinRows(): Promise<DailyMinRow[]> {
+  if (!hasDatabase()) return [];
+
+  try {
+    const prisma = await getPrisma();
+    const [levels, schedules] = await Promise.all([
+      prisma.stockLevel.findMany({
+        include: {
+          product: true,
+          storeLocation: true,
+        },
+        orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
+      }),
+      prisma.stockMinSchedule.findMany(),
+    ]);
+
+    const byKey = new Map<string, Partial<Record<number, number>>>();
+    for (const row of schedules) {
+      const key = `${row.productId}:${row.storeLocationId}`;
+      const current = byKey.get(key) ?? {};
+      current[row.dayOfWeek] = row.minLevel;
+      byKey.set(key, current);
+    }
+
+    return levels.map((level) => ({
+      productId: level.productId,
+      storeLocationId: level.storeLocationId,
+      sku: level.product.sku,
+      name: level.product.name,
+      locationName: level.storeLocation.name,
+      defaultMin: level.minLevel,
+      mins: byKey.get(`${level.productId}:${level.storeLocationId}`) ?? {},
+    }));
+  } catch (err) {
+    console.error("getDailyMinRows failed:", err);
+    return [];
+  }
 }
 
 /** Re-export mock locations for any UI that still needs them without DB. */

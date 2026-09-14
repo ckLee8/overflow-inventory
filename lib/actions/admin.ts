@@ -36,6 +36,8 @@ function revalidateAdmin() {
   revalidatePath("/admin/products");
   revalidatePath("/admin/vendors");
   revalidatePath("/admin/locations");
+  revalidatePath("/admin/minimums");
+  revalidatePath("/admin/clock");
   revalidatePath("/inventory");
   revalidatePath("/ordering");
   revalidatePath("/vendors");

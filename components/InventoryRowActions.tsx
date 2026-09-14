@@ -125,7 +125,7 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
                 ? "Unmark as received (does not change stock)"
                 : "Marked received — view only"
               : canReceive
-                ? "Mark expected delivery as received (does not change stock)"
+                ? "Mark expected delivery as received (Expected clears next day; on-hand unchanged)"
                 : "View only"
           }
         >

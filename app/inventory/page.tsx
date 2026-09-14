@@ -40,8 +40,10 @@ export default async function InventoryPage() {
         {canEditStock
           ? " ADMIN/MANAGER can edit; saves an ADJUST movement."
           : " View only for STAFF."}{" "}
-        Expected is read-only. Receive only marks the inbound line — it does{" "}
-        <strong className="font-medium text-foreground">not</strong> change on-hand
+        Min is today’s weekday target (set under Admin → Minimums). Expected is inbound still
+        open — after you check Receive it stays until{" "}
+        <strong className="font-medium text-foreground">the next day</strong>, then drops to 0.
+        Receive does not change on-hand
         {canReceive ? " (ADMIN/MANAGER)." : " (STAFF view-only)."} Unmarked inbound rows are
         highlighted.
       </PageHead>
@@ -56,7 +58,10 @@ export default async function InventoryPage() {
                 On hand
                 <span className="mt-0.5 block text-xs font-normal">today ({todayDate.slice(5)})</span>
               </th>
-              <th className="px-3 py-3 font-medium">Min</th>
+              <th className="px-3 py-3 font-medium">
+                Min
+                <span className="mt-0.5 block text-xs font-normal">today</span>
+              </th>
               <th className="px-3 py-3 font-medium">Expected</th>
               <th className="px-3 py-3 font-medium">Receive</th>
             </tr>
@@ -70,7 +75,7 @@ export default async function InventoryPage() {
               </tr>
             ) : (
               rows.map((row) => {
-                const below = row.onHand + row.onOrder < row.minLevel;
+                const below = row.onHand + row.expected < row.minLevel;
                 const inbound = row.inboundLines ?? [];
                 const primary = pickPrimaryInbound(inbound);
                 const hasUnmarkedInbound = Boolean(primary && !primary.markedReceived);
@@ -99,7 +104,7 @@ export default async function InventoryPage() {
                       />
                     </td>
                     <td className="px-3 py-3 tabular-nums">{row.minLevel}</td>
-                    <td className="px-3 py-3 tabular-nums">{row.onOrder}</td>
+                    <td className="px-3 py-3 tabular-nums">{row.expected}</td>
                     <InventoryRowActions
                       key={primary?.lineId ?? row.id}
                       primary={primary}

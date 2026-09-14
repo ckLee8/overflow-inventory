@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireManagerOrAdmin } from "@/lib/auth";
+import { getBusinessToday } from "@/lib/clock";
 import { hasDatabase } from "@/lib/db";
 
 export type SetLineMarkedReceivedResult =
@@ -49,8 +50,10 @@ function revalidateReceivingPaths() {
 
 /**
  * Two-way Receive checkbox: mark an inbound PO line as actually received
- * (true) or not (false). Does **not** mutate StockLevel.onHand / onOrder,
- * receivedQty, or create stock movements. Delivery-issue flag is independent.
+ * (true) or not (false). Does **not** change StockLevel.onHand or receivedQty.
+ * Expected stays the inbound qty on the day it is marked; starting the next
+ * business day Expected for that line drops to 0 (`markedReceivedOn`).
+ * Delivery-issue flag is independent.
  *
  * Optionally updates PO header: all lines marked → RECEIVED; some → PARTIAL;
  * none after prior PARTIAL/RECEIVED → SUBMITTED (if any SHIPPED) else APPROVED.
@@ -80,6 +83,7 @@ export async function setLineMarkedReceived(
   }
 
   const nextMarked = Boolean(markedReceived);
+  const today = nextMarked ? await getBusinessToday() : null;
 
   try {
     const { prisma } = await import("@/lib/prisma");
@@ -110,9 +114,13 @@ export async function setLineMarkedReceived(
         );
       }
 
+      const markedReceivedOn = nextMarked && today
+        ? new Date(`${today}T00:00:00.000Z`)
+        : null;
+
       await tx.purchaseOrderLine.update({
         where: { id: line.id },
-        data: { markedReceived: nextMarked },
+        data: { markedReceived: nextMarked, markedReceivedOn },
       });
 
       const refreshed = await tx.purchaseOrderLine.findMany({

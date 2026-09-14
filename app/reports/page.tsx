@@ -46,7 +46,7 @@ export default async function ReportsPage() {
                   <span className="ml-2 text-muted-foreground">· {row.locationName}</span>
                 </span>
                 <span className="tabular-nums text-warn">
-                  {row.onHand + row.onOrder}
+                  {row.onHand + row.expected}
                   <span className="text-muted-foreground"> / min {row.minLevel}</span>
                 </span>
               </li>

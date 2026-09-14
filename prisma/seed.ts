@@ -139,7 +139,7 @@ async function main() {
         productId: towel.id,
         storeLocationId: backStock.id,
         onHand: 40,
-        onOrder: 12, // Expected display — not changed by Receive checkbox
+        onOrder: 12, // Expected until Receive + next day
         minLevel: 20,
         reorderQty: 24,
       },
@@ -147,7 +147,7 @@ async function main() {
         productId: candle.id,
         storeLocationId: mainFloor.id,
         onHand: 3,
-        onOrder: 18, // Expected display — not changed by Receive checkbox
+        onOrder: 18, // Expected until Receive + next day
         minLevel: 15,
         reorderQty: 24,
       },
@@ -155,7 +155,7 @@ async function main() {
         productId: tape.id,
         storeLocationId: backStock.id,
         onHand: 2,
-        onOrder: 6, // Expected display — not changed by Receive checkbox
+        onOrder: 6, // Expected until Receive + next day
         minLevel: 10,
         reorderQty: 12,
       },
