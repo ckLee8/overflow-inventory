@@ -3,23 +3,25 @@ import { OnHandEditor } from "@/components/OnHandEditor";
 import { PageHead, TableWrap, cn } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { getBusinessClock } from "@/lib/clock";
-import { getInventoryRows, type InboundLineBadge } from "@/lib/data";
+import { getInventoryRows, isInboundActive, type InboundLineBadge } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Primary inbound line for a SKU×location row: prefer unmarked SHIPPED over
- * ORDERED; if all marked, fall back to a marked line (checkbox reversible).
+ * Primary inbound line for a SKU×location row: prefer still-open unmarked
+ * SHIPPED over ORDERED; fall back to a settled line so the checkbox can uncheck.
  */
-function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null {
+function pickPrimaryInbound(lines: InboundLineBadge[], today: string): InboundLineBadge | null {
   if (lines.length === 0) return null;
-  const unmarked = lines.filter((l) => !l.markedReceived);
+  const open = lines.filter((l) => isInboundActive(l, today));
+  const pool = open.length > 0 ? open : lines;
+  const unmarked = pool.filter((l) => !l.markedReceived);
   if (unmarked.length > 0) {
     const shipped = unmarked.filter((l) => l.fulfillmentStatus === "SHIPPED");
     const ordered = unmarked.filter((l) => l.fulfillmentStatus === "ORDERED");
     return shipped[0] ?? ordered[0] ?? unmarked[0];
   }
-  return lines[0] ?? null;
+  return pool[0] ?? null;
 }
 
 export default async function InventoryPage() {
@@ -42,7 +44,8 @@ export default async function InventoryPage() {
           : " View only for STAFF."}{" "}
         Min is today’s weekday target (set under Admin → Minimums). Expected is inbound still
         open — after you check Receive it stays until{" "}
-        <strong className="font-medium text-foreground">the next day</strong>, then drops to 0.
+        <strong className="font-medium text-foreground">the next day</strong>, then drops to 0
+        and the Receive checkbox unchecks.
         Receive does not change on-hand
         {canReceive ? " (ADMIN/MANAGER)." : " (STAFF view-only)."} Unmarked inbound rows are
         highlighted.
@@ -77,8 +80,10 @@ export default async function InventoryPage() {
               rows.map((row) => {
                 const below = row.onHand + row.expected < row.minLevel;
                 const inbound = row.inboundLines ?? [];
-                const primary = pickPrimaryInbound(inbound);
-                const hasUnmarkedInbound = Boolean(primary && !primary.markedReceived);
+                const primary = pickPrimaryInbound(inbound, todayDate);
+                const hasUnmarkedInbound = inbound.some(
+                  (l) => isInboundActive(l, todayDate) && !l.markedReceived,
+                );
                 return (
                   <tr
                     key={row.id}
@@ -110,6 +115,7 @@ export default async function InventoryPage() {
                       primary={primary}
                       canReceive={canReceive}
                       source={row.source}
+                      todayDate={todayDate}
                     />
                   </tr>
                 );

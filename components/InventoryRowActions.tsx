@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { setLineMarkedReceived } from "@/lib/actions/receiving";
 import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
 import type { InboundLineBadge } from "@/lib/data";
+import { isReceiveSettled } from "@/lib/data";
 import { cn } from "@/components/ui";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   primary: InboundLineBadge | null;
   canReceive: boolean;
   source: "db" | "mock";
+  todayDate: string;
 };
 
 function WarningTriangle({ className }: { className?: string }) {
@@ -34,12 +36,15 @@ function WarningTriangle({ className }: { className?: string }) {
 
 /**
  * Binary in-row receive checkbox + delivery-issue flag.
- * Checkbox only toggles PurchaseOrderLine.markedReceived (true/false).
- * Does not change on-hand, Expected/on-order, or receivedQty.
+ * Checkbox toggles PurchaseOrderLine.markedReceived (true/false).
+ * Next day the mark settles: Expected goes to 0 and the box unchecks.
+ * Does not change on-hand or receivedQty.
  * ADMIN/MANAGER only; STAFF view-only.
  */
-export function InventoryRowActions({ primary, canReceive, source }: Props) {
-  const initiallyReceived = Boolean(primary?.markedReceived);
+export function InventoryRowActions({ primary, canReceive, source, todayDate }: Props) {
+  const initiallyReceived = Boolean(
+    primary?.markedReceived && !isReceiveSettled(primary, todayDate),
+  );
   const [received, setReceived] = useState(initiallyReceived);
   const [flagged, setFlagged] = useState(Boolean(primary?.deliveryIssue));
   const [message, setMessage] = useState<string | null>(null);
@@ -48,9 +53,15 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   const router = useRouter();
 
   useEffect(() => {
-    setReceived(Boolean(primary?.markedReceived));
+    setReceived(Boolean(primary?.markedReceived && !isReceiveSettled(primary, todayDate)));
     setFlagged(Boolean(primary?.deliveryIssue));
-  }, [primary?.lineId, primary?.markedReceived, primary?.deliveryIssue]);
+  }, [
+    primary?.lineId,
+    primary?.markedReceived,
+    primary?.markedReceivedOn,
+    primary?.deliveryIssue,
+    todayDate,
+  ]);
 
   if (!primary) {
     return <td className="px-3 py-3 text-muted-foreground">—</td>;

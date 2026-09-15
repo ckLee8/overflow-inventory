@@ -48,16 +48,27 @@ export function ymdFromUnknown(value: unknown): string | null {
 }
 
 /**
+ * Receive from a prior business day has settled: Expected is 0 and the
+ * checkbox should read as unchecked. `markedReceivedOn` stays so we do not
+ * treat it as fresh inbound again.
+ */
+export function isReceiveSettled(
+  line: { markedReceivedOn?: string | null },
+  today: string,
+): boolean {
+  return Boolean(line.markedReceivedOn && line.markedReceivedOn < today);
+}
+
+/**
  * A received line still counts toward Expected on the day it was marked.
- * Starting the next business day it no longer does (Expected can go to 0).
+ * Starting the next business day it is settled (Expected 0, checkbox off).
  */
 export function isInboundActive(
   line: { markedReceived: boolean; markedReceivedOn?: string | null },
   today: string,
 ): boolean {
-  if (!line.markedReceived) return true;
-  if (!line.markedReceivedOn) return true;
-  return line.markedReceivedOn >= today;
+  if (isReceiveSettled(line, today)) return false;
+  return true;
 }
 
 export function expectedFromInbound(
@@ -116,6 +127,18 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       },
       orderBy: [{ product: { sku: "asc" } }, { storeLocation: { code: "asc" } }],
     });
+
+    try {
+      await prisma.purchaseOrderLine.updateMany({
+        where: {
+          markedReceived: true,
+          markedReceivedOn: { lt: new Date(`${today}T00:00:00.000Z`) },
+        },
+        data: { markedReceived: false },
+      });
+    } catch (expireErr) {
+      console.error("expire settled receives failed:", expireErr);
+    }
 
     let minSchedules: { productId: string; storeLocationId: string; dayOfWeek: number; minLevel: number }[] =
       [];
