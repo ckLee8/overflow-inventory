@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { requireManagerOrAdmin } from "@/lib/auth";
+import { getBusinessToday } from "@/lib/clock";
 import { hasDatabase } from "@/lib/db";
+import { ymdFromUnknown } from "@/lib/inbound";
 
 export type SetLineMarkedReceivedResult =
   | {
@@ -47,10 +49,99 @@ function revalidateReceivingPaths() {
   revalidatePath("/reports");
 }
 
+export type SetRowMarkedReceivedResult =
+  | { ok: true; markedReceived: boolean; updated: number }
+  | { ok: false; error: string };
+
+/**
+ * Receive checkbox for inventory: marks prior-day weekly-grid orders for this
+ * SKU × location. Expected is those quantities; checking Receive zeros it.
+ * The next day the box unchecks. Does not change on-hand.
+ * ADMIN / MANAGER only.
+ */
+export async function setRowMarkedReceived(input: {
+  productId: string;
+  storeLocationId: string;
+  markedReceived: boolean;
+}): Promise<SetRowMarkedReceivedResult> {
+  try {
+    await requireManagerOrAdmin();
+  } catch {
+    return { ok: false, error: "Forbidden: manager or admin only" };
+  }
+
+  if (!hasDatabase()) {
+    return {
+      ok: false,
+      error: "DATABASE_URL not set — marking received requires Postgres.",
+    };
+  }
+
+  const productId = String(input.productId ?? "").trim();
+  const storeLocationId = String(input.storeLocationId ?? "").trim();
+  if (!productId || !storeLocationId) {
+    return { ok: false, error: "Missing product or location" };
+  }
+
+  const nextMarked = Boolean(input.markedReceived);
+
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const today = await getBusinessToday();
+    const todayStart = new Date(`${today}T00:00:00.000Z`);
+
+    const cells = await prisma.weeklyOrderPlanCell.findMany({
+      where: {
+        productId,
+        storeLocationId,
+        quantity: { gt: 0 },
+        orderDate: { lt: todayStart },
+      },
+    });
+
+    const targetIds = cells
+      .filter((cell) => {
+        const on = ymdFromUnknown(cell.markedReceivedOn);
+        if (nextMarked) {
+          return !(on && on < today);
+        }
+        return on === today;
+      })
+      .map((cell) => cell.id);
+
+    if (targetIds.length === 0) {
+      return {
+        ok: false,
+        error: nextMarked
+          ? "Nothing to receive — no orders from previous days."
+          : "Nothing to unmark.",
+      };
+    }
+
+    const result = await prisma.weeklyOrderPlanCell.updateMany({
+      where: { id: { in: targetIds } },
+      data: nextMarked
+        ? { markedReceived: true, markedReceivedOn: todayStart }
+        : { markedReceived: false, markedReceivedOn: null },
+    });
+
+    revalidateReceivingPaths();
+    return { ok: true, markedReceived: nextMarked, updated: result.count };
+  } catch (err) {
+    console.error("setRowMarkedReceived failed:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Update failed",
+    };
+  }
+}
+
 /**
  * Two-way Receive checkbox: mark an inbound PO line as actually received
- * (true) or not (false). Does **not** mutate StockLevel.onHand / onOrder,
- * receivedQty, or create stock movements. Delivery-issue flag is independent.
+ * (true) or not (false). Does **not** change StockLevel.onHand or receivedQty.
+ * Expected goes to 0 as soon as the box is checked. Starting the next
+ * business day the checkbox unchecks (`markedReceivedOn` stays so it does
+ * not count as inbound again). Delivery-issue flag is independent.
  *
  * Optionally updates PO header: all lines marked → RECEIVED; some → PARTIAL;
  * none after prior PARTIAL/RECEIVED → SUBMITTED (if any SHIPPED) else APPROVED.
@@ -80,6 +171,7 @@ export async function setLineMarkedReceived(
   }
 
   const nextMarked = Boolean(markedReceived);
+  const today = nextMarked ? await getBusinessToday() : null;
 
   try {
     const { prisma } = await import("@/lib/prisma");
@@ -110,9 +202,13 @@ export async function setLineMarkedReceived(
         );
       }
 
+      const markedReceivedOn = nextMarked && today
+        ? new Date(`${today}T00:00:00.000Z`)
+        : null;
+
       await tx.purchaseOrderLine.update({
         where: { id: line.id },
-        data: { markedReceived: nextMarked },
+        data: { markedReceived: nextMarked, markedReceivedOn },
       });
 
       const refreshed = await tx.purchaseOrderLine.findMany({

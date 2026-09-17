@@ -99,6 +99,7 @@ export async function updateOrderCell(input: {
     }
 
     revalidatePath("/ordering");
+    revalidatePath("/inventory");
     revalidatePath("/approvals");
     revalidatePath("/reports");
     return { ok: true, quantity: qty };

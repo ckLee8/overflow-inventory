@@ -29,6 +29,12 @@ const cards = [
     body: "Manage store / stock locations used by inventory and ordering.",
   },
   {
+    href: "/admin/minimums",
+    kicker: "Par",
+    title: "Daily minimums",
+    body: "Set min on-hand per SKU × location for each weekday. Inventory uses today’s min.",
+  },
+  {
     href: "/admin/clock",
     kicker: "Test",
     title: "Test clock",

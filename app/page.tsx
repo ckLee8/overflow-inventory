@@ -6,7 +6,7 @@ const cards = [
     href: "/inventory",
     kicker: "Stock",
     title: "Inventory",
-    body: "On-hand, expected, and min levels by SKU × location. Receive is a checkbox — it does not change stock.",
+    body: "On-hand, min, and expected from orders placed on previous days. Receive zeros Expected.",
   },
   {
     href: "/ordering",

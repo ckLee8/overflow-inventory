@@ -82,9 +82,25 @@ export function formatYmd(d: Date): string {
 
 const SHORT_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-export function weekdayShortUtc(ymd: string): string {
-  return SHORT_WEEKDAYS[new Date(`${ymd}T00:00:00.000Z`).getUTCDay()];
+/** 0 = Sunday … 6 = Saturday, from a YYYY-MM-DD calendar date (UTC). */
+export function weekdayUtc(ymd: string): number {
+  return new Date(`${ymd}T00:00:00.000Z`).getUTCDay();
 }
+
+export function weekdayShortUtc(ymd: string): string {
+  return SHORT_WEEKDAYS[weekdayUtc(ymd)];
+}
+
+/** Monday-first week used by the order grid and min schedule UI. */
+export const WEEK_GRID_DAYS = [
+  { dayOfWeek: 1, label: "Mon" },
+  { dayOfWeek: 2, label: "Tue" },
+  { dayOfWeek: 3, label: "Wed" },
+  { dayOfWeek: 4, label: "Thu" },
+  { dayOfWeek: 5, label: "Fri" },
+  { dayOfWeek: 6, label: "Sat" },
+  { dayOfWeek: 0, label: "Sun" },
+] as const;
 
 export function formatLongDateUtc(ymd: string): string {
   return new Intl.DateTimeFormat("en-US", {

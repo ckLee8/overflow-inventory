@@ -2,16 +2,23 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setLineMarkedReceived } from "@/lib/actions/receiving";
-import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
-import type { InboundLineBadge } from "@/lib/data";
+import { setRowMarkedReceived } from "@/lib/actions/receiving";
+import { setRowDeliveryIssue } from "@/lib/actions/deliveryIssue";
+import {
+  isReceiveChecked,
+  type InboundLineBadge,
+} from "@/lib/inbound";
 import { cn } from "@/components/ui";
 
 type Props = {
-  /** Primary PO line for this SKU × location (unmarked preferred; else marked). */
   primary: InboundLineBadge | null;
+  expected: number;
+  inboundQty: number;
+  productId?: string;
+  storeLocationId?: string;
   canReceive: boolean;
   source: "db" | "mock";
+  todayDate: string;
 };
 
 function WarningTriangle({ className }: { className?: string }) {
@@ -33,14 +40,22 @@ function WarningTriangle({ className }: { className?: string }) {
 }
 
 /**
- * Binary in-row receive checkbox + delivery-issue flag.
- * Checkbox only toggles PurchaseOrderLine.markedReceived (true/false).
- * Does not change on-hand, Expected/on-order, or receivedQty.
- * ADMIN/MANAGER only; STAFF view-only.
+ * Expected + Receive checkbox. Checking Receive zeros Expected immediately.
+ * The next day the checkbox unchecks. On-hand is unchanged.
  */
-export function InventoryRowActions({ primary, canReceive, source }: Props) {
-  const initiallyReceived = Boolean(primary?.markedReceived);
+export function InventoryRowActions({
+  primary,
+  expected,
+  inboundQty,
+  productId,
+  storeLocationId,
+  canReceive,
+  source,
+  todayDate,
+}: Props) {
+  const initiallyReceived = primary ? isReceiveChecked(primary, todayDate) : false;
   const [received, setReceived] = useState(initiallyReceived);
+  const [expectedQty, setExpectedQty] = useState(expected);
   const [flagged, setFlagged] = useState(Boolean(primary?.deliveryIssue));
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,17 +63,31 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   const router = useRouter();
 
   useEffect(() => {
-    setReceived(Boolean(primary?.markedReceived));
+    setReceived(primary ? isReceiveChecked(primary, todayDate) : false);
+    setExpectedQty(expected);
     setFlagged(Boolean(primary?.deliveryIssue));
-  }, [primary?.lineId, primary?.markedReceived, primary?.deliveryIssue]);
+  }, [
+    primary?.lineId,
+    primary?.markedReceived,
+    primary?.markedReceivedOn,
+    primary?.deliveryIssue,
+    todayDate,
+    expected,
+  ]);
 
   if (!primary) {
-    return <td className="px-3 py-3 text-muted-foreground">—</td>;
+    return (
+      <>
+        <td className="px-3 py-3 tabular-nums">{expectedQty}</td>
+        <td className="px-3 py-3 text-muted-foreground">—</td>
+      </>
+    );
   }
 
   const dbOk = source === "db";
   const receiveDisabled = !canReceive || pending || !dbOk;
   const flagDisabled = !canReceive || pending || !dbOk;
+  const openQty = Math.max(0, inboundQty, primary.remaining);
 
   const setReceiveChecked = (checked: boolean) => {
     setMessage(null);
@@ -73,14 +102,27 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
       return;
     }
 
+    const skuId = productId ?? primary.productId;
+    const locId = storeLocationId ?? primary.storeLocationId;
+    if (!skuId || !locId) {
+      setError("Missing product or location.");
+      return;
+    }
+
     setReceived(checked);
+    setExpectedQty(checked ? 0 : openQty);
     startTransition(async () => {
-      const result = await setLineMarkedReceived(primary.lineId, checked);
+      const result = await setRowMarkedReceived({
+        productId: skuId,
+        storeLocationId: locId,
+        markedReceived: checked,
+      });
       if (result.ok) {
-        setMessage(checked ? "Marked received" : "Unmarked");
+        setMessage(checked ? "Received — expected cleared" : "Unmarked");
         router.refresh();
       } else {
         setReceived(!checked);
+        setExpectedQty(checked ? openQty : 0);
         setError(result.error);
       }
     });
@@ -99,10 +141,18 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
       return;
     }
 
+    const skuId = productId ?? primary.productId;
+    const locId = storeLocationId ?? primary.storeLocationId;
+    if (!skuId || !locId) {
+      setError("Missing product or location.");
+      return;
+    }
+
     const next = !flagged;
     startTransition(async () => {
-      const result = await setPoLineDeliveryIssue({
-        lineId: primary.lineId,
+      const result = await setRowDeliveryIssue({
+        productId: skuId,
+        storeLocationId: locId,
         deliveryIssue: next,
       });
       if (result.ok) {
@@ -115,54 +165,57 @@ export function InventoryRowActions({ primary, canReceive, source }: Props) {
   };
 
   return (
-    <td className="px-3 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <label
-          className={cn("inline-flex min-h-11 items-center gap-2", receiveDisabled && "opacity-60")}
-          title={
-            received
-              ? canReceive
-                ? "Unmark as received (does not change stock)"
-                : "Marked received — view only"
-              : canReceive
-                ? "Mark expected delivery as received (does not change stock)"
-                : "View only"
-          }
-        >
-          <input
-            type="checkbox"
-            className="h-5 w-5 rounded border-input text-primary touch-manipulation accent-primary focus:ring-ring disabled:cursor-not-allowed"
-            checked={received}
-            disabled={receiveDisabled}
-            onChange={(e) => setReceiveChecked(e.target.checked)}
-            aria-label={received ? "Unmark line as received" : "Mark expected delivery as received"}
-          />
-          <span className="sr-only">
-            {received
-              ? "Uncheck to unmark as received"
-              : "Check to mark expected delivery as received"}
-          </span>
-        </label>
+    <>
+      <td className="px-3 py-3 tabular-nums">{expectedQty}</td>
+      <td className="px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className={cn("inline-flex min-h-11 items-center gap-2", receiveDisabled && "opacity-60")}
+            title={
+              received
+                ? canReceive
+                  ? "Unmark as received — Expected comes back (on-hand unchanged)"
+                  : "Marked received — view only"
+                : canReceive
+                  ? "Mark received — Expected goes to 0 (on-hand unchanged)"
+                  : "View only"
+            }
+          >
+            <input
+              type="checkbox"
+              className="h-5 w-5 rounded border-input text-primary touch-manipulation accent-primary focus:ring-ring disabled:cursor-not-allowed"
+              checked={received}
+              disabled={receiveDisabled}
+              onChange={(e) => setReceiveChecked(e.target.checked)}
+              aria-label={received ? "Unmark line as received" : "Mark expected delivery as received"}
+            />
+            <span className="sr-only">
+              {received
+                ? "Uncheck to unmark as received"
+                : "Check to mark expected delivery as received"}
+            </span>
+          </label>
 
-        <button
-          type="button"
-          title="Flag delivery issue"
-          aria-label="Flag delivery issue"
-          aria-pressed={flagged}
-          disabled={flagDisabled}
-          onClick={toggleFlag}
-          className={cn(
-            "inline-flex min-h-11 min-w-11 items-center justify-center rounded-md touch-manipulation transition-colors duration-150 ease-smooth disabled:cursor-not-allowed disabled:opacity-50",
-            flagged
-              ? "text-warn hover:bg-warn/10 hover:text-warn"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          )}
-        >
-          <WarningTriangle className="h-5 w-5" />
-        </button>
-      </div>
-      {message ? <p className="mt-1 text-[10px] text-ok">{message}</p> : null}
-      {error ? <p className="mt-1 text-[10px] text-destructive">{error}</p> : null}
-    </td>
+          <button
+            type="button"
+            title="Flag delivery issue"
+            aria-label="Flag delivery issue"
+            aria-pressed={flagged}
+            disabled={flagDisabled}
+            onClick={toggleFlag}
+            className={cn(
+              "inline-flex min-h-11 min-w-11 items-center justify-center rounded-md touch-manipulation transition-colors duration-150 ease-smooth disabled:cursor-not-allowed disabled:opacity-50",
+              flagged
+                ? "text-warn hover:bg-warn/10 hover:text-warn"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <WarningTriangle className="h-5 w-5" />
+          </button>
+        </div>
+        {message ? <p className="mt-1 text-[10px] text-ok">{message}</p> : null}
+        {error ? <p className="mt-1 text-[10px] text-destructive">{error}</p> : null}
+      </td>
+    </>
   );
 }

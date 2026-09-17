@@ -4,22 +4,25 @@ import { PageHead, TableWrap, cn } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { getBusinessClock } from "@/lib/clock";
 import { getInventoryRows, type InboundLineBadge } from "@/lib/data";
+import { isInboundActive } from "@/lib/inbound";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Primary inbound line for a SKU×location row: prefer unmarked SHIPPED over
- * ORDERED; if all marked, fall back to a marked line (checkbox reversible).
+ * Primary prior-day order cell for a SKU×location: prefer still-open
+ * (unreceived) cells; fall back to a received-today cell so the box can uncheck.
  */
-function pickPrimaryInbound(lines: InboundLineBadge[]): InboundLineBadge | null {
+function pickPrimaryInbound(lines: InboundLineBadge[], today: string): InboundLineBadge | null {
   if (lines.length === 0) return null;
-  const unmarked = lines.filter((l) => !l.markedReceived);
+  const open = lines.filter((l) => isInboundActive(l, today));
+  const pool = open.length > 0 ? open : lines;
+  const unmarked = pool.filter((l) => !l.markedReceived);
   if (unmarked.length > 0) {
     const shipped = unmarked.filter((l) => l.fulfillmentStatus === "SHIPPED");
     const ordered = unmarked.filter((l) => l.fulfillmentStatus === "ORDERED");
     return shipped[0] ?? ordered[0] ?? unmarked[0];
   }
-  return lines[0] ?? null;
+  return pool[0] ?? null;
 }
 
 export default async function InventoryPage() {
@@ -40,8 +43,11 @@ export default async function InventoryPage() {
         {canEditStock
           ? " ADMIN/MANAGER can edit; saves an ADJUST movement."
           : " View only for STAFF."}{" "}
-        Expected is read-only. Receive only marks the inbound line — it does{" "}
-        <strong className="font-medium text-foreground">not</strong> change on-hand
+        Min is today’s weekday target (set under Admin → Minimums).{" "}
+        <strong className="font-medium text-foreground">Expected</strong> is qty ordered on
+        previous days (the weekly grid). Today’s order shows as Expected tomorrow. Checking
+        Receive sets Expected to 0; the next day the checkbox unchecks.
+        Receive does not change on-hand
         {canReceive ? " (ADMIN/MANAGER)." : " (STAFF view-only)."} Unmarked inbound rows are
         highlighted.
       </PageHead>
@@ -56,7 +62,10 @@ export default async function InventoryPage() {
                 On hand
                 <span className="mt-0.5 block text-xs font-normal">today ({todayDate.slice(5)})</span>
               </th>
-              <th className="px-3 py-3 font-medium">Min</th>
+              <th className="px-3 py-3 font-medium">
+                Min
+                <span className="mt-0.5 block text-xs font-normal">today</span>
+              </th>
               <th className="px-3 py-3 font-medium">Expected</th>
               <th className="px-3 py-3 font-medium">Receive</th>
             </tr>
@@ -70,10 +79,13 @@ export default async function InventoryPage() {
               </tr>
             ) : (
               rows.map((row) => {
-                const below = row.onHand + row.onOrder < row.minLevel;
+                const below = row.onHand + row.expected < row.minLevel;
                 const inbound = row.inboundLines ?? [];
-                const primary = pickPrimaryInbound(inbound);
-                const hasUnmarkedInbound = Boolean(primary && !primary.markedReceived);
+                const primary = pickPrimaryInbound(inbound, todayDate);
+                const inboundQty = inbound.reduce((sum, l) => sum + Math.max(0, l.remaining), 0);
+                const hasUnmarkedInbound = inbound.some(
+                  (l) => isInboundActive(l, todayDate) && !l.markedReceived,
+                );
                 return (
                   <tr
                     key={row.id}
@@ -99,12 +111,16 @@ export default async function InventoryPage() {
                       />
                     </td>
                     <td className="px-3 py-3 tabular-nums">{row.minLevel}</td>
-                    <td className="px-3 py-3 tabular-nums">{row.onOrder}</td>
                     <InventoryRowActions
-                      key={primary?.lineId ?? row.id}
+                      key={`${primary?.lineId ?? row.id}:${todayDate}`}
                       primary={primary}
+                      expected={row.expected}
+                      inboundQty={inboundQty}
+                      productId={row.productId}
+                      storeLocationId={row.storeLocationId}
                       canReceive={canReceive}
                       source={row.source}
+                      todayDate={todayDate}
                     />
                   </tr>
                 );
