@@ -129,6 +129,10 @@ model WeeklyOrderPlanCell {
   storeLocationId String
   orderDate       DateTime
   quantity        Int      @default(0)
+  markedReceived    Boolean @default(false)
+  markedReceivedOn  DateTime?
+  deliveryIssue     Boolean @default(false)
+  deliveryIssueNote String?
 
   plan          WeeklyOrderPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   product       Product         @relation(fields: [productId], references: [id])

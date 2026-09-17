@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setLineMarkedReceived } from "@/lib/actions/receiving";
-import { setPoLineDeliveryIssue } from "@/lib/actions/deliveryIssue";
+import { setRowMarkedReceived } from "@/lib/actions/receiving";
+import { setRowDeliveryIssue } from "@/lib/actions/deliveryIssue";
 import {
   isReceiveChecked,
   type InboundLineBadge,
@@ -13,6 +13,9 @@ import { cn } from "@/components/ui";
 type Props = {
   primary: InboundLineBadge | null;
   expected: number;
+  inboundQty: number;
+  productId?: string;
+  storeLocationId?: string;
   canReceive: boolean;
   source: "db" | "mock";
   todayDate: string;
@@ -43,6 +46,9 @@ function WarningTriangle({ className }: { className?: string }) {
 export function InventoryRowActions({
   primary,
   expected,
+  inboundQty,
+  productId,
+  storeLocationId,
   canReceive,
   source,
   todayDate,
@@ -81,7 +87,7 @@ export function InventoryRowActions({
   const dbOk = source === "db";
   const receiveDisabled = !canReceive || pending || !dbOk;
   const flagDisabled = !canReceive || pending || !dbOk;
-  const openQty = Math.max(0, primary.remaining);
+  const openQty = Math.max(0, inboundQty, primary.remaining);
 
   const setReceiveChecked = (checked: boolean) => {
     setMessage(null);
@@ -96,10 +102,21 @@ export function InventoryRowActions({
       return;
     }
 
+    const skuId = productId ?? primary.productId;
+    const locId = storeLocationId ?? primary.storeLocationId;
+    if (!skuId || !locId) {
+      setError("Missing product or location.");
+      return;
+    }
+
     setReceived(checked);
     setExpectedQty(checked ? 0 : openQty);
     startTransition(async () => {
-      const result = await setLineMarkedReceived(primary.lineId, checked);
+      const result = await setRowMarkedReceived({
+        productId: skuId,
+        storeLocationId: locId,
+        markedReceived: checked,
+      });
       if (result.ok) {
         setMessage(checked ? "Received — expected cleared" : "Unmarked");
         router.refresh();
@@ -124,10 +141,18 @@ export function InventoryRowActions({
       return;
     }
 
+    const skuId = productId ?? primary.productId;
+    const locId = storeLocationId ?? primary.storeLocationId;
+    if (!skuId || !locId) {
+      setError("Missing product or location.");
+      return;
+    }
+
     const next = !flagged;
     startTransition(async () => {
-      const result = await setPoLineDeliveryIssue({
-        lineId: primary.lineId,
+      const result = await setRowDeliveryIssue({
+        productId: skuId,
+        storeLocationId: locId,
         deliveryIssue: next,
       });
       if (result.ok) {

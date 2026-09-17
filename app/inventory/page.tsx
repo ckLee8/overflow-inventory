@@ -9,8 +9,8 @@ import { isInboundActive } from "@/lib/inbound";
 export const dynamic = "force-dynamic";
 
 /**
- * Primary inbound line for a SKU×location row: prefer still-open unmarked
- * SHIPPED over ORDERED; fall back to a settled line so the checkbox can uncheck.
+ * Primary prior-day order cell for a SKU×location: prefer still-open
+ * (unreceived) cells; fall back to a received-today cell so the box can uncheck.
  */
 function pickPrimaryInbound(lines: InboundLineBadge[], today: string): InboundLineBadge | null {
   if (lines.length === 0) return null;
@@ -43,9 +43,10 @@ export default async function InventoryPage() {
         {canEditStock
           ? " ADMIN/MANAGER can edit; saves an ADJUST movement."
           : " View only for STAFF."}{" "}
-        Min is today’s weekday target (set under Admin → Minimums). Checking{" "}
-        <strong className="font-medium text-foreground">Receive</strong> sets Expected to 0
-        immediately. The next day the checkbox unchecks so it is ready for the next delivery.
+        Min is today’s weekday target (set under Admin → Minimums).{" "}
+        <strong className="font-medium text-foreground">Expected</strong> is qty ordered on
+        previous days (the weekly grid). Today’s order shows as Expected tomorrow. Checking
+        Receive sets Expected to 0; the next day the checkbox unchecks.
         Receive does not change on-hand
         {canReceive ? " (ADMIN/MANAGER)." : " (STAFF view-only)."} Unmarked inbound rows are
         highlighted.
@@ -81,6 +82,7 @@ export default async function InventoryPage() {
                 const below = row.onHand + row.expected < row.minLevel;
                 const inbound = row.inboundLines ?? [];
                 const primary = pickPrimaryInbound(inbound, todayDate);
+                const inboundQty = inbound.reduce((sum, l) => sum + Math.max(0, l.remaining), 0);
                 const hasUnmarkedInbound = inbound.some(
                   (l) => isInboundActive(l, todayDate) && !l.markedReceived,
                 );
@@ -113,6 +115,9 @@ export default async function InventoryPage() {
                       key={`${primary?.lineId ?? row.id}:${todayDate}`}
                       primary={primary}
                       expected={row.expected}
+                      inboundQty={inboundQty}
+                      productId={row.productId}
+                      storeLocationId={row.storeLocationId}
                       canReceive={canReceive}
                       source={row.source}
                       todayDate={todayDate}

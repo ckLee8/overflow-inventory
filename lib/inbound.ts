@@ -3,6 +3,10 @@
 export type InboundLineBadge = {
   lineId: string;
   poId: string;
+  productId?: string;
+  storeLocationId?: string;
+  /** YYYY-MM-DD the order was placed (weekly grid cell). */
+  orderDate?: string;
   fulfillmentStatus: string;
   remaining: number;
   quantity: number;
@@ -42,8 +46,8 @@ export function isReceiveChecked(
 }
 
 /**
- * Still counts toward Expected. Received lines do not — Expected goes to 0
- * as soon as Receive is checked, and stays 0 after the checkbox settles.
+ * Still counts toward Expected: prior-day orders that have not been received.
+ * Today's grid qty is not expected yet (shows tomorrow). Received → 0.
  */
 export function isInboundActive(
   line: { markedReceived: boolean; markedReceivedOn?: string | null },
@@ -55,11 +59,9 @@ export function isInboundActive(
 }
 
 export function expectedFromInbound(
-  onOrder: number,
   inbound: InboundLineBadge[],
   today: string,
 ): number {
-  if (inbound.length === 0) return onOrder;
   return inbound
     .filter((line) => isInboundActive(line, today))
     .reduce((sum, line) => sum + Math.max(0, line.remaining), 0);

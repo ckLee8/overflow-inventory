@@ -3,6 +3,8 @@ import { getBusinessToday } from "@/lib/clock";
 import { hasDatabase } from "@/lib/db";
 import {
   expectedFromInbound,
+  isInboundActive,
+  isReceiveChecked,
   ymdFromUnknown,
   type InboundLineBadge,
 } from "@/lib/inbound";
@@ -50,7 +52,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       vendorName: r.vendorName,
       onHand: r.onHand,
       onOrder: r.onOrder,
-      expected: r.onOrder,
+      expected: 0,
       minLevel: r.minLevel,
       source: "mock" as const,
     }));
@@ -60,18 +62,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
     const prisma = await getPrisma();
     const today = await getBusinessToday();
     const todayDow = weekdayUtc(today);
-    const { PoLineFulfillmentStatus, PurchaseOrderStatus } = await import(
-      "@prisma/client"
-    );
-
-    const inboundPoStatus = {
-      in: [
-        PurchaseOrderStatus.APPROVED,
-        PurchaseOrderStatus.SUBMITTED,
-        PurchaseOrderStatus.PARTIAL,
-        PurchaseOrderStatus.RECEIVED,
-      ],
-    };
+    const todayStart = new Date(`${today}T00:00:00.000Z`);
 
     const levels = await prisma.stockLevel.findMany({
       include: {
@@ -82,15 +73,15 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
     });
 
     try {
-      await prisma.purchaseOrderLine.updateMany({
+      await prisma.weeklyOrderPlanCell.updateMany({
         where: {
           markedReceived: true,
-          markedReceivedOn: { lt: new Date(`${today}T00:00:00.000Z`) },
+          markedReceivedOn: { lt: todayStart },
         },
         data: { markedReceived: false },
       });
     } catch (expireErr) {
-      console.error("expire settled receives failed:", expireErr);
+      console.error("expire settled order-cell receives failed:", expireErr);
     }
 
     let minSchedules: { productId: string; storeLocationId: string; dayOfWeek: number; minLevel: number }[] =
@@ -106,76 +97,40 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       minByKey.set(`${row.productId}:${row.storeLocationId}:${row.dayOfWeek}`, row.minLevel);
     }
 
-    // Inbound lines for checkbox / flag UI (ORDERED|SHIPPED|RECEIVED).
-    let openLines;
-    try {
-      openLines = await prisma.purchaseOrderLine.findMany({
-        where: {
-          purchaseOrder: {
-            status: inboundPoStatus,
-            storeLocationId: { not: null },
-          },
-          fulfillmentStatus: {
-            in: [
-              PoLineFulfillmentStatus.ORDERED,
-              PoLineFulfillmentStatus.SHIPPED,
-              PoLineFulfillmentStatus.RECEIVED,
-            ],
-          },
-        },
-        include: { purchaseOrder: true },
-      });
-    } catch (lineErr) {
-      console.error(
-        "purchaseOrderLine inbound query failed; retrying without fulfillmentStatus filter:",
-        lineErr,
-      );
-      openLines = await prisma.purchaseOrderLine.findMany({
-        where: {
-          purchaseOrder: {
-            status: inboundPoStatus,
-            storeLocationId: { not: null },
-          },
-        },
-        include: { purchaseOrder: true },
-      });
-    }
+    // Expected = weekly grid qty placed on a previous day, not yet received.
+    const priorCells = await prisma.weeklyOrderPlanCell.findMany({
+      where: {
+        quantity: { gt: 0 },
+        orderDate: { lt: todayStart },
+      },
+    });
 
     const inboundByKey = new Map<string, InboundLineBadge[]>();
-    for (const line of openLines) {
-      const locId = line.purchaseOrder.storeLocationId;
-      if (!locId) continue;
-      if (line.quantity <= 0) continue;
-
-      const remaining = Math.max(0, line.quantity - line.receivedQty);
-      const fulfillmentStatus =
-        (line as { fulfillmentStatus?: string }).fulfillmentStatus ?? "ORDERED";
-      const markedReceived = Boolean(
-        (line as { markedReceived?: boolean }).markedReceived,
-      );
-      const markedReceivedOn = ymdFromUnknown(
-        (line as { markedReceivedOn?: Date | string | null }).markedReceivedOn,
-      );
-      const deliveryIssue = Boolean(
-        (line as { deliveryIssue?: boolean }).deliveryIssue,
-      );
-      const deliveryIssueNote =
-        (line as { deliveryIssueNote?: string | null }).deliveryIssueNote ??
-        null;
-      const key = `${line.productId}:${locId}`;
-      const list = inboundByKey.get(key) ?? [];
-      list.push({
-        lineId: line.id,
-        poId: line.purchaseOrderId,
-        fulfillmentStatus,
-        remaining,
-        quantity: line.quantity,
-        receivedQty: line.receivedQty,
+    for (const cell of priorCells) {
+      const orderDate = ymdFromUnknown(cell.orderDate);
+      const markedReceived = Boolean(cell.markedReceived);
+      const markedReceivedOn = ymdFromUnknown(cell.markedReceivedOn);
+      const badge: InboundLineBadge = {
+        lineId: cell.id,
+        poId: cell.planId,
+        productId: cell.productId,
+        storeLocationId: cell.storeLocationId,
+        orderDate: orderDate ?? undefined,
+        fulfillmentStatus: "ORDERED",
+        remaining: cell.quantity,
+        quantity: cell.quantity,
+        receivedQty: 0,
         markedReceived,
         markedReceivedOn,
-        deliveryIssue,
-        deliveryIssueNote,
-      });
+        deliveryIssue: Boolean(cell.deliveryIssue),
+        deliveryIssueNote: cell.deliveryIssueNote ?? null,
+      };
+      if (!isInboundActive(badge, today) && !isReceiveChecked(badge, today)) {
+        continue;
+      }
+      const key = `${cell.productId}:${cell.storeLocationId}`;
+      const list = inboundByKey.get(key) ?? [];
+      list.push(badge);
       inboundByKey.set(key, list);
     }
 
@@ -195,7 +150,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
         vendorName: level.product.vendor?.name ?? "—",
         onHand: level.onHand,
         onOrder: level.onOrder,
-        expected: expectedFromInbound(level.onOrder, inbound, today),
+        expected: expectedFromInbound(inbound, today),
         minLevel: scheduledMin ?? level.minLevel,
         inboundLines: inbound,
         source: "db" as const,
@@ -211,7 +166,7 @@ export async function getInventoryRows(): Promise<InventoryRow[]> {
       vendorName: r.vendorName,
       onHand: r.onHand,
       onOrder: r.onOrder,
-      expected: r.onOrder,
+      expected: 0,
       minLevel: r.minLevel,
       source: "mock" as const,
     }));

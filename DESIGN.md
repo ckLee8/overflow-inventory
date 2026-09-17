@@ -140,7 +140,9 @@ Columns: SKU (+ name) | Location | On hand (editable today, ADMIN/MANAGER) | Min
 
 When multiple open PO lines exist for the same SKU × location, the row uses the **primary** line (prefer unmarked **SHIPPED** over **ORDERED**; marked lines stay available so the checkbox can be unchecked). No open inbound → no checkbox (dash).
 
-**Receive checkbox** toggles `PurchaseOrderLine.markedReceived` and `markedReceivedOn` (the business date it was checked). It does **not** change `StockLevel.onHand` or `receivedQty`, and creates **no** stock movements. **Expected** is the sum of still-open inbound remaining qty and goes to **0 as soon as Receive is checked**. **The next day** the checkbox unchecks (`markedReceived` is cleared; `markedReceivedOn` stays so it does not count as fresh inbound). Checking it again on a later day re-opens Expected for that day. Uncheck the same day restores Expected immediately. Migration: `20260914010000_expected_reset_and_daily_mins` (`markedReceivedOn` + `StockMinSchedule`). Server action: `setLineMarkedReceived(lineId, boolean)` (ADMIN/MANAGER). Legacy `receiveAgainstPo` / `reverseReceiveForLine` are gutted (no ledger) and forward to that setter.
+**Expected** is qty **ordered on previous days** on the weekly grid (`WeeklyOrderPlanCell` where `orderDate` < today). Today’s grid qty is not expected yet — it shows tomorrow (use the test clock). Seed `StockLevel.onOrder` / PO lines are not used for this column.
+
+Checking **Receive** marks those prior-day cells (`markedReceived` + `markedReceivedOn`) and sets Expected to **0**. It does **not** change `StockLevel.onHand`. **The next day** the checkbox unchecks. Uncheck the same day restores Expected. Server action: `setRowMarkedReceived({ productId, storeLocationId, markedReceived })` (ADMIN/MANAGER). Migration: `20260917010000_order_cell_receive`.
 
 **Delivery issue flag** (triangle icon to the right of the checkbox): toggles `PurchaseOrderLine.deliveryIssue` (Boolean, default false) and optional `deliveryIssueNote`. Independent of `markedReceived`. Gray when clear; amber when flagged. Click toggles for MVP (no modal required). Migration: `20260907051500_add_po_line_delivery_issue`.
 
@@ -210,7 +212,7 @@ Implemented in `tailwind.config.ts`, `app/globals.css`, `components/ui.tsx`, and
 - Week-start day (Monday UTC for plan keys today); **business “today”** uses `APP_TIMEZONE` (default America/New_York)
 - Whether one PO per vendor-per-day or finer splits
 
-- **2026-09-16** — Inventory Receive zeros Expected immediately; checkbox still unchecks the next day. Client Expected cell updates without waiting on a full refresh.
+- **2026-09-17** — Inventory Expected is prior-day weekly-grid orders, not PO `onOrder`. Receive marks those cells; Expected 0 on check; checkbox unchecks the next day. Migration `20260917010000_order_cell_receive`.
 - **2026-09-14** — Expected clears after Receive (`markedReceivedOn`); weekday mins per SKU × location via `StockMinSchedule` + `/admin/minimums`. Migration `20260914010000_expected_reset_and_daily_mins`.
 - **2026-09-13** — Admin test clock: `/admin/clock` sets `AppSetting.simulated_today`; `getBusinessClock()` drives weekly-grid locks, week shown, and on-hand “today” copy; banner while override is on.
 - **2026-09-12** — Visual restyle: warm paper + teal desk tokens, Fraunces / IBM Plex pairing, shared `components/ui.tsx` primitives, iPad bottom nav, no behavior change.
