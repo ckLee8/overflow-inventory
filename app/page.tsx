@@ -6,7 +6,7 @@ const cards = [
     href: "/inventory",
     kicker: "Stock",
     title: "Inventory",
-    body: "On-hand, expected, and min levels by SKU × location. Receive clears Expected the next day.",
+    body: "On-hand, expected, and min levels by SKU × location. Receive zeros Expected; the box clears the next day.",
   },
   {
     href: "/ordering",

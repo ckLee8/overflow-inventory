@@ -51,9 +51,9 @@ function revalidateReceivingPaths() {
 /**
  * Two-way Receive checkbox: mark an inbound PO line as actually received
  * (true) or not (false). Does **not** change StockLevel.onHand or receivedQty.
- * Expected stays the inbound qty on the day it is marked; starting the next
- * business day Expected for that line drops to 0 (`markedReceivedOn`).
- * Delivery-issue flag is independent.
+ * Expected goes to 0 as soon as the box is checked. Starting the next
+ * business day the checkbox unchecks (`markedReceivedOn` stays so it does
+ * not count as inbound again). Delivery-issue flag is independent.
  *
  * Optionally updates PO header: all lines marked → RECEIVED; some → PARTIAL;
  * none after prior PARTIAL/RECEIVED → SUBMITTED (if any SHIPPED) else APPROVED.

@@ -1,23 +1,21 @@
 import { mockOrderRows } from "@/lib/mock-data";
 import { getBusinessToday } from "@/lib/clock";
 import { hasDatabase } from "@/lib/db";
+import {
+  expectedFromInbound,
+  ymdFromUnknown,
+  type InboundLineBadge,
+} from "@/lib/inbound";
 import { weekdayUtc } from "@/lib/timezone";
 
-export type InboundLineBadge = {
-  lineId: string;
-  poId: string;
-  fulfillmentStatus: string;
-  /** Expected open qty display helper (quantity − receivedQty); checkbox ignores this. */
-  remaining: number;
-  quantity: number;
-  receivedQty: number;
-  /** True/false Receive checkbox state — independent of on-hand. */
-  markedReceived: boolean;
-  /** YYYY-MM-DD the checkbox was last turned on; null when unmarked. */
-  markedReceivedOn: string | null;
-  deliveryIssue: boolean;
-  deliveryIssueNote?: string | null;
-};
+export type { InboundLineBadge } from "@/lib/inbound";
+export {
+  expectedFromInbound,
+  isInboundActive,
+  isReceiveChecked,
+  isReceiveSettled,
+  ymdFromUnknown,
+} from "@/lib/inbound";
 
 export type InventoryRow = {
   id: string;
@@ -30,57 +28,12 @@ export type InventoryRow = {
   onHand: number;
   /** Raw StockLevel.onOrder (may still hold inbound after Receive). */
   onOrder: number;
-  /** Expected receipts for today: inbound still open, or 0 the day after Receive. */
+  /** Expected receipts still open. Drops to 0 as soon as Receive is checked. */
   expected: number;
   minLevel: number;
   inboundLines?: InboundLineBadge[];
   source: "db" | "mock";
 };
-
-export function ymdFromUnknown(value: unknown): string | null {
-  if (value == null) return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
-  }
-  const s = String(value);
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  return null;
-}
-
-/**
- * Receive from a prior business day has settled: Expected is 0 and the
- * checkbox should read as unchecked. `markedReceivedOn` stays so we do not
- * treat it as fresh inbound again.
- */
-export function isReceiveSettled(
-  line: { markedReceivedOn?: string | null },
-  today: string,
-): boolean {
-  return Boolean(line.markedReceivedOn && line.markedReceivedOn < today);
-}
-
-/**
- * A received line still counts toward Expected on the day it was marked.
- * Starting the next business day it is settled (Expected 0, checkbox off).
- */
-export function isInboundActive(
-  line: { markedReceived: boolean; markedReceivedOn?: string | null },
-  today: string,
-): boolean {
-  if (isReceiveSettled(line, today)) return false;
-  return true;
-}
-
-export function expectedFromInbound(
-  onOrder: number,
-  inbound: InboundLineBadge[],
-  today: string,
-): number {
-  if (inbound.length === 0) return onOrder;
-  return inbound
-    .filter((line) => isInboundActive(line, today))
-    .reduce((sum, line) => sum + Math.max(0, line.remaining), 0);
-}
 
 async function getPrisma() {
   const { prisma } = await import("@/lib/prisma");

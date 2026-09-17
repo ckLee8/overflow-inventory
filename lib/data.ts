@@ -14,7 +14,8 @@ import { mondayUtcForDateString, weekdayUtc } from "@/lib/timezone";
 import type { InventoryRow } from "@/lib/inventoryQuery";
 import { getInventoryRows } from "@/lib/inventoryQuery";
 export type { InboundLineBadge, InventoryRow } from "@/lib/inventoryQuery";
-export { getInventoryRows, isInboundActive, isReceiveSettled } from "@/lib/inventoryQuery";
+export { getInventoryRows } from "@/lib/inventoryQuery";
+export { isInboundActive, isReceiveChecked, isReceiveSettled } from "@/lib/inbound";
 
 export type OrderGridRow = MockSkuRow & { source: "db" | "mock" };
 

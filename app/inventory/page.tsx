@@ -3,7 +3,8 @@ import { OnHandEditor } from "@/components/OnHandEditor";
 import { PageHead, TableWrap, cn } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { getBusinessClock } from "@/lib/clock";
-import { getInventoryRows, isInboundActive, type InboundLineBadge } from "@/lib/data";
+import { getInventoryRows, type InboundLineBadge } from "@/lib/data";
+import { isInboundActive } from "@/lib/inbound";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +43,9 @@ export default async function InventoryPage() {
         {canEditStock
           ? " ADMIN/MANAGER can edit; saves an ADJUST movement."
           : " View only for STAFF."}{" "}
-        Min is today’s weekday target (set under Admin → Minimums). Expected is inbound still
-        open — after you check Receive it stays until{" "}
-        <strong className="font-medium text-foreground">the next day</strong>, then drops to 0
-        and the Receive checkbox unchecks.
+        Min is today’s weekday target (set under Admin → Minimums). Checking{" "}
+        <strong className="font-medium text-foreground">Receive</strong> sets Expected to 0
+        immediately. The next day the checkbox unchecks so it is ready for the next delivery.
         Receive does not change on-hand
         {canReceive ? " (ADMIN/MANAGER)." : " (STAFF view-only)."} Unmarked inbound rows are
         highlighted.
@@ -109,10 +109,10 @@ export default async function InventoryPage() {
                       />
                     </td>
                     <td className="px-3 py-3 tabular-nums">{row.minLevel}</td>
-                    <td className="px-3 py-3 tabular-nums">{row.expected}</td>
                     <InventoryRowActions
-                      key={primary?.lineId ?? row.id}
+                      key={`${primary?.lineId ?? row.id}:${todayDate}`}
                       primary={primary}
+                      expected={row.expected}
                       canReceive={canReceive}
                       source={row.source}
                       todayDate={todayDate}
