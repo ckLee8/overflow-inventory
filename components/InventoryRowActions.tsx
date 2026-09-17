@@ -57,7 +57,6 @@ export function InventoryRowActions({
   const [received, setReceived] = useState(initiallyReceived);
   const [expectedQty, setExpectedQty] = useState(expected);
   const [flagged, setFlagged] = useState(Boolean(primary?.deliveryIssue));
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -90,7 +89,6 @@ export function InventoryRowActions({
   const openQty = Math.max(0, inboundQty, primary.remaining);
 
   const setReceiveChecked = (checked: boolean) => {
-    setMessage(null);
     setError(null);
 
     if (!canReceive) {
@@ -118,7 +116,6 @@ export function InventoryRowActions({
         markedReceived: checked,
       });
       if (result.ok) {
-        setMessage(checked ? "Received — expected cleared" : "Unmarked");
         router.refresh();
       } else {
         setReceived(!checked);
@@ -129,7 +126,6 @@ export function InventoryRowActions({
   };
 
   const toggleFlag = () => {
-    setMessage(null);
     setError(null);
 
     if (!canReceive) {
@@ -213,7 +209,6 @@ export function InventoryRowActions({
             <WarningTriangle className="h-5 w-5" />
           </button>
         </div>
-        {message ? <p className="mt-1 text-[10px] text-ok">{message}</p> : null}
         {error ? <p className="mt-1 text-[10px] text-destructive">{error}</p> : null}
       </td>
     </>

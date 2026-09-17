@@ -40,7 +40,6 @@ export function OnHandEditor({
     if (next === initialOnHand) return;
 
     if (source !== "db") {
-      setStatus("Mock — not persisted");
       return;
     }
 
@@ -50,11 +49,7 @@ export function OnHandEditor({
         onHand: next,
       });
       if (result.ok) {
-        setStatus(
-          result.delta === 0
-            ? "No change"
-            : `Saved (Δ ${result.delta > 0 ? "+" : ""}${result.delta})`,
-        );
+        setStatus(null);
       } else {
         setValue(String(initialOnHand));
         setStatus(result.error);
@@ -90,7 +85,7 @@ export function OnHandEditor({
         )}
         aria-label={`Today's on hand for stock ${stockLevelId}`}
       />
-      {status ? <span className="text-[10px] text-muted-foreground">{status}</span> : null}
+      {status ? <span className="text-[10px] text-destructive">{status}</span> : null}
     </div>
   );
 }
